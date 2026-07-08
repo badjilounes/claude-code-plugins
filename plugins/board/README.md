@@ -1,6 +1,6 @@
 # board — Claude Code plugin
 
-Plugin Claude Code qui embarque le serveur MCP `board` (HTTP, hébergé sur Railway) **et**
+Plugin Claude Code qui embarque le serveur MCP `board` (HTTP hébergé) **et**
 le workflow watcher sous forme de skills chargées à la demande. Remplace le « handoff
 prompt » qu'on collait à la main : une fois le plugin installé, les outils board sont
 disponibles et Claude sait comment piloter le board sans copier-coller — et tu **autorises
@@ -102,7 +102,7 @@ Conditions pour que le web l'honore :
    chemin local dans le clone cloud.
 2. Autorise le connecteur **dans le navigateur** à la première utilisation — **aucun secret
    cloud à définir** (l'OAuth remplace la clé).
-3. Le host Railway du MCP (`mcp-production-b5f9.up.railway.app`) n'est pas sur l'allowlist
+3. L'hôte du serveur MCP (`mcp-production-b5f9.up.railway.app`) n'est pas sur l'allowlist
    réseau « Trusted » par défaut ⇒ autorise l'accès réseau (Full/Custom) côté environnement web.
 
 > **claude.ai chat (grand public)** n'a **pas** de plugins ni de skills importables — juste

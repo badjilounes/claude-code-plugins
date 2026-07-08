@@ -1,11 +1,13 @@
 {
   "name": "board",
+  "displayName": "Board",
   "version": "0.1.0",
-  "description": "Board — LLM task-tracking layer. Embeds the board MCP server (Railway) and ships the watcher workflow as on-demand skills.",
+  "description": "Give Claude an audited task board for the tickets it works: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs and act on new comments. Bundles the Board MCP server and its watcher workflow as on-demand skills.",
   "author": {
-    "name": "Lounes"
+    "name": "Lounes",
+    "email": "lounesbadji@gmail.com"
   },
   "homepage": "https://github.com/badjilounes/board",
   "repository": "https://github.com/badjilounes/claude-code-plugins",
-  "keywords": ["mcp", "board", "task-tracking", "workflow", "watcher"]
+  "keywords": ["mcp", "board", "task-tracking", "workflow", "watcher", "audit"]
 }
