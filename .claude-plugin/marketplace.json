@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-code-plugins",
+  "name": "badjilounes",
   "description": "A personal Claude Code plugin marketplace by @badjilounes — starting with Board, an AgentOps task-tracking plugin for audited AI-assisted development workflows.",
   "owner": {
     "name": "Board",

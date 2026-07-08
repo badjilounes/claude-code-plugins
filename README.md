@@ -12,7 +12,7 @@ claude plugin marketplace add badjilounes/claude-code-plugins
 
 | Plugin | Install | What it does |
 | --- | --- | --- |
-| **board** | `claude plugin install board@claude-code-plugins` | The [Board](https://github.com/badjilounes/board) MCP server (hosted on Railway) + the watcher workflow as on-demand skills. Browser OAuth — no key to paste. See [`plugins/board`](plugins/board). |
+| **board** | `claude plugin install board@badjilounes` | The [Board](https://github.com/badjilounes/board) MCP server + the watcher workflow as on-demand skills. Browser OAuth — no key to paste. See [`plugins/board`](plugins/board). |
 
 ## Layout
 

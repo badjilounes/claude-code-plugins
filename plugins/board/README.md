@@ -53,7 +53,7 @@ Board** (login email/mdp ou « Continuer avec mon compte Board » → Google/Git
 
 ```bash
 claude plugin marketplace add badjilounes/claude-code-plugins
-claude plugin install board@claude-code-plugins
+claude plugin install board@badjilounes
 ```
 
 À la première utilisation d'un outil board, **autorise le connecteur dans le navigateur**.
@@ -67,7 +67,7 @@ Pour **tester en local avant de pousser** (depuis un clone de ce repo) :
 
 ```bash
 claude plugin marketplace add ./            # depuis la racine du repo marketplace
-claude plugin install board@claude-code-plugins
+claude plugin install board@badjilounes
 ```
 
 Puis retire l'ancien serveur MCP ajouté à la main, pour éviter le doublon :
@@ -85,12 +85,12 @@ repo sur lequel tu travailles. Il déclare le marketplace + active le plugin :
 ```json
 {
   "extraKnownMarketplaces": {
-    "claude-code-plugins": {
+    "badjilounes": {
       "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" }
     }
   },
   "enabledPlugins": {
-    "board@claude-code-plugins": true
+    "board@badjilounes": true
   }
 }
 ```
