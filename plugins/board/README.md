@@ -121,7 +121,7 @@ Le handoff prompt (auparavant un pavé collé depuis la web app) est découpé p
 | Skill | Rôle |
 | --- | --- |
 | `board-workflow` | Au début de session : `get_workflow`, lire statuses/transitions/playbook/automation/reportPrompt, orchestrer les autres skills. |
-| `board-task` | Ticket → `create_request` → `create_task`, start/finish, status/branch/PR, présence (`start_session`/`heartbeat_task`/`end_session`). |
+| `board-task` | Ticket → `create_request` → `create_task`, start/finish, status/branch/PR, présence (`start_session`/`heartbeat_task`/`end_session`), plan de test (`add_test_step`/`update_test_step`/`remove_test_step`/`list_test_steps`) + médias par URL externe. |
 | `board-watch` | Boucle : `list_comments` + application des 4 modes `automation.autoMergeMode`. |
 | `board-report` | `list_work_notes` → `upsert_report` selon `reportPrompt` et `reportingCadence`. |
 
