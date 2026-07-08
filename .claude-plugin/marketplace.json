@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-code-plugins",
-  "description": "Personal Claude Code marketplace by @badjilounes — the Board task-tracking plugin, with more to come.",
+  "description": "A personal Claude Code plugin marketplace by @badjilounes — starting with Board, an AgentOps task-tracking plugin for audited AI-assisted development workflows.",
   "owner": {
     "name": "Lounes",
     "email": "lounesbadji@gmail.com"
@@ -10,13 +10,23 @@
     {
       "name": "board",
       "displayName": "Board",
-      "description": "Give Claude an audited task board for the tickets it works: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs and act on new comments. Bundles the Board MCP server and its watcher workflow as on-demand skills.",
+      "description": "Give Claude Code an audited task board for the tickets it handles. Board turns external tickets into trackable requests, breaks them down into actionable tasks, keeps status, branches, pull requests and daily reports in sync, and watches open PRs for new comments or required follow-ups. It bundles the Board MCP server and watcher workflow as on-demand Claude Code skills.",
       "author": {
-        "name": "Lounes",
+        "name": "Lounes BADJI",
         "email": "lounesbadji@gmail.com"
       },
       "category": "productivity",
-      "keywords": ["mcp", "task-tracking", "workflow", "watcher", "board", "audit"],
+      "keywords": [
+        "agentops",
+        "mcp",
+        "claude-code",
+        "task-tracking",
+        "audit-trail",
+        "workflow",
+        "watcher",
+        "pull-requests",
+        "board"
+      ],
       "source": "./plugins/board",
       "homepage": "https://github.com/badjilounes/board"
     }
