@@ -2,9 +2,10 @@
 name: board-task
 description: >-
   Drive a Board task's lifecycle: turn a ticket into a request, decompose it into tasks,
-  start and finish work, and keep status, branch, PR and presence up to date. Use when
-  picking up a ticket, starting or finishing a task, or when asked to work a Board item.
-  Applies the statuses, transitions and playbook loaded by the board-workflow skill.
+  start and finish work, attach a test plan with media captures, and keep status, branch,
+  PR and presence up to date. Use when picking up a ticket, starting or finishing a task,
+  writing a test plan, or when asked to work a Board item. Applies the statuses, transitions
+  and playbook loaded by the board-workflow skill.
 ---
 
 # Board — task lifecycle
@@ -39,4 +40,22 @@ If you stop pinging, the task shows stale, then offline, on its own.
 10. Move to the in-review / terminal status, respecting transitions
     (`in_progress → in_review` needs a `change_request` artifact).
 11. `record_work_note` with kind `finished`.
-12. Then refresh the report per cadence → skill **board-report**.
+12. Attach a **test plan** so a human can replay and validate → see below.
+13. Then refresh the report per cadence → skill **board-report**.
+
+## Test plan (strongly recommended once work is done)
+
+Describe how to test the task or request so a human can follow, replay and validate it.
+
+- `add_test_step` once per ordered step: `targetType` (`task` | `request`), `targetId`,
+  `instruction`, optional `expectedResult`, `position` for ordering, and `authorType: llm`.
+  A human later moves each step's `status` `pending → passed | failed | skipped`.
+- Attach proof as `media` — **external URLs only** (`{ kind: image | video, url, caption? }`);
+  Board stores the URL, never the bytes.
+- `list_test_steps` (`targetType` + `targetId`) reads the current plan;
+  `update_test_step` (by `id`) edits a step — passing `media` **replaces** its whole set;
+  `remove_test_step` (by `id`) drops a step and its media.
+
+Summaries, descriptions and comments render as **markdown**: embed screenshots/videos inline
+with `![alt](https://…/shot.png)` (a `.mp4`/`.webm` URL renders as an inline player), so the
+captures show up directly on the task and request pages.
