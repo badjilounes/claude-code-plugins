@@ -1,0 +1,11 @@
+{
+  "name": "board",
+  "version": "0.1.0",
+  "description": "Board — LLM task-tracking layer. Embeds the board MCP server (Railway) and ships the watcher workflow as on-demand skills.",
+  "author": {
+    "name": "Lounes"
+  },
+  "homepage": "https://github.com/badjilounes/board",
+  "repository": "https://github.com/badjilounes/claude-code-plugins",
+  "keywords": ["mcp", "board", "task-tracking", "workflow", "watcher"]
+}

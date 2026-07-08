@@ -1,0 +1,13 @@
+{
+  "name": "claude-code-plugins",
+  "owner": {
+    "name": "Lounes"
+  },
+  "plugins": [
+    {
+      "name": "board",
+      "source": "./plugins/board",
+      "description": "Board MCP server (Railway) + watcher skills, exposed as a Claude Code plugin"
+    }
+  ]
+}

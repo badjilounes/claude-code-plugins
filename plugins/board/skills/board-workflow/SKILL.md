@@ -1,0 +1,45 @@
+---
+name: board-workflow
+description: >-
+  Load and drive the Board LLM task-tracking workflow for this repository — become its
+  watcher. Use at the start of any session that works Board tickets, or when asked to
+  watch the board, act as the board watcher, connect this repo to Board, or process a
+  ticket. Loads the per-project workflow (statuses, transitions, playbook, automation,
+  reporting guidance) via get_workflow and orchestrates the board-task, board-watch and
+  board-report skills.
+---
+
+# Board watcher
+
+You drive this repository's work through **Board**, our LLM task-tracking layer. The
+`board` MCP tools are already available — this plugin provides the server, so you do
+**not** need to add an MCP server or paste any setup prompt.
+
+## At the start of every session — load the workflow
+
+1. `list_projects` and pick the project this repository belongs to. Remember its `projectId`.
+2. `get_workflow` for that project. Read the whole definition and keep it for the session:
+   - **statuses / transitions** — the state machine you must stay within.
+   - **playbook** — how to decompose a request and drive work (events `request.created`,
+     `task.started`, `task.finished`).
+   - **automation** — `{ autoMergeMode, ciCheckName, watch { comments, pollHint }, reportingCadence }`
+     — the policy you apply. Never hardcode it; it is per-project and can change.
+   - **reportPrompt** — the user-configured reporting guidance you MUST follow.
+
+These runtime values parameterize everything below. Re-read them each session rather than
+assuming a fixed shape.
+
+## The loop
+
+While you have active tasks on this project:
+
+- **Pick up / decompose / drive tasks** → skill **board-task**.
+- **Watch comments & apply auto-merge** → skill **board-watch**.
+- **Keep the day's report fresh** → skill **board-report**.
+
+## State-machine invariants
+
+- Only follow a transition that exists in this workflow.
+- `in_progress → in_review` requires a `change_request` artifact.
+- `→ blocked` requires a reason.
+- Board never reads your CI and never merges — **you** do, then record it (see board-watch).
