@@ -10,7 +10,7 @@
     {
       "name": "board",
       "displayName": "Board",
-      "description": "Give Claude Code an audited task board for the tickets it handles.\nBoard turns external tickets into trackable requests, breaks them down into actionable tasks, keeps status, branches, pull requests and daily reports in sync, and watches open PRs for new comments or required follow-ups.\n\nIt bundles the Board MCP server and watcher workflow as on-demand Claude Code skills.\n Developed by @Board.",
+      "description": "Give Claude Code an audited task board for the tickets it handles.\n\nBoard turns external tickets into trackable requests, breaks them down into actionable tasks, keeps status, branches, pull requests and daily reports in sync, and watches open PRs for new comments or required follow-ups.\n\nIt bundles the Board MCP server and watcher workflow as on-demand Claude Code skills.\n\nDeveloped by @Board.",
       "author": {
         "name": "Lounes BADJI",
         "email": "lounesbadji@gmail.com"
