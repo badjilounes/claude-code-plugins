@@ -3,14 +3,14 @@
   "name": "claude-code-plugins",
   "description": "A personal Claude Code plugin marketplace by @badjilounes — starting with Board, an AgentOps task-tracking plugin for audited AI-assisted development workflows.",
   "owner": {
-    "name": "Lounes",
+    "name": "Board",
     "email": "lounesbadji@gmail.com"
   },
   "plugins": [
     {
       "name": "board",
       "displayName": "Board",
-      "description": "Give Claude Code an audited task board for the tickets it handles. Board turns external tickets into trackable requests, breaks them down into actionable tasks, keeps status, branches, pull requests and daily reports in sync, and watches open PRs for new comments or required follow-ups. It bundles the Board MCP server and watcher workflow as on-demand Claude Code skills.",
+      "description": "Give Claude Code an audited task board for the tickets it handles.\nBoard turns external tickets into trackable requests, breaks them down into actionable tasks, keeps status, branches, pull requests and daily reports in sync, and watches open PRs for new comments or required follow-ups.\n\nIt bundles the Board MCP server and watcher workflow as on-demand Claude Code skills.\n Developed by @Board.",
       "author": {
         "name": "Lounes BADJI",
         "email": "lounesbadji@gmail.com"
