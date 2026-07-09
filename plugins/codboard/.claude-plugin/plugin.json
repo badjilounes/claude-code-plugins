@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "description": "Give Claude an audited task board for the tickets it works: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs and act on new comments. Bundles the CodBoard MCP server and its watcher workflow as on-demand skills.",
   "author": {
-    "name": "Lounes",
-    "email": "lounesbadji@gmail.com"
+    "name": "CodBoard",
+    "email": "support@codboard.com"
   },
-  "homepage": "https://github.com/badjilounes/board",
+  "homepage": "https://codeboard.com",
   "repository": "https://github.com/badjilounes/claude-code-plugins",
   "keywords": ["mcp", "codboard", "task-tracking", "workflow", "watcher", "audit"]
 }
