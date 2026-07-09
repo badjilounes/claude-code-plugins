@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "codboard": {
+      "type": "http",
+      "url": "https://mcp.codboard.com/mcp"
+    }
+  }
+}

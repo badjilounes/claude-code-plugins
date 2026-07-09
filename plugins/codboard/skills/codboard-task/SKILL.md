@@ -1,16 +1,16 @@
 ---
-name: board-task
+name: codboard-task
 description: >-
-  Drive a Board task's lifecycle: turn a ticket into a request, decompose it into tasks,
+  Drive a CodBoard task's lifecycle: turn a ticket into a request, decompose it into tasks,
   start and finish work, attach a test plan with media captures, and keep status, branch,
   PR and presence up to date. Use when picking up a ticket, starting or finishing a task,
-  writing a test plan, or when asked to work a Board item. Applies the statuses, transitions
-  and playbook loaded by the board-workflow skill.
+  writing a test plan, or when asked to work a CodBoard item. Applies the statuses, transitions
+  and playbook loaded by the codboard-workflow skill.
 ---
 
-# Board — task lifecycle
+# CodBoard — task lifecycle
 
-Runtime policy comes from `get_workflow` (loaded by the **board-workflow** skill). Apply
+Runtime policy comes from `get_workflow` (loaded by the **codboard-workflow** skill). Apply
 this project's statuses, transitions and playbook — do not invent states.
 
 ## Turn a ticket into work
@@ -26,7 +26,7 @@ this project's statuses, transitions and playbook — do not invent states.
 
 ## Presence — declare that you are working
 
-While actively working a task, make yourself visible so Board can show you online:
+While actively working a task, make yourself visible so CodBoard can show you online:
 
 6. `start_session` (executionId + taskId) once when you begin.
 7. `heartbeat_task` (taskId) periodically (~every 30s).
@@ -41,7 +41,7 @@ If you stop pinging, the task shows stale, then offline, on its own.
     (`in_progress → in_review` needs a `change_request` artifact).
 11. `record_work_note` with kind `finished`.
 12. Attach a **test plan** so a human can replay and validate → see below.
-13. Then refresh the report per cadence → skill **board-report**.
+13. Then refresh the report per cadence → skill **codboard-report**.
 
 ## Test plan (strongly recommended once work is done)
 
@@ -51,7 +51,7 @@ Describe how to test the task or request so a human can follow, replay and valid
   `instruction`, optional `expectedResult`, `position` for ordering, and `authorType: llm`.
   A human later moves each step's `status` `pending → passed | failed | skipped`.
 - Attach proof as `media` — **external URLs only** (`{ kind: image | video, url, caption? }`);
-  Board stores the URL, never the bytes.
+  CodBoard stores the URL, never the bytes.
 - `list_test_steps` (`targetType` + `targetId`) reads the current plan;
   `update_test_step` (by `id`) edits a step — passing `media` **replaces** its whole set;
   `remove_test_step` (by `id`) drops a step and its media.

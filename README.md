@@ -12,7 +12,7 @@ claude plugin marketplace add badjilounes/claude-code-plugins
 
 | Plugin | Install | What it does |
 | --- | --- | --- |
-| **board** | `claude plugin install board@badjilounes` | The [Board](https://github.com/badjilounes/board) MCP server + the watcher workflow as on-demand skills. Browser OAuth — no key to paste. See [`plugins/board`](plugins/board). |
+| **CodBoard** | `claude plugin install codboard@badjilounes` | The [CodBoard](https://github.com/badjilounes/board) MCP server + the watcher workflow as on-demand skills. Browser OAuth — no key to paste. See [`plugins/codboard`](plugins/codboard). |
 
 ## Layout
 
@@ -20,10 +20,10 @@ claude plugin marketplace add badjilounes/claude-code-plugins
 .claude-plugin/
 └── marketplace.json          # catalog: lists each plugin → ./plugins/<name>
 plugins/
-└── board/                     # the board plugin (manifest, .mcp.json, skills, README)
+└── codboard/                  # the CodBoard plugin (manifest, .mcp.json, skills, README)
 ```
 
 The catalog lives at the repo **root** (`.claude-plugin/marketplace.json`) because
 `claude plugin marketplace add <owner/repo>` reads the manifest from the root of the remote
 repo — there is no `owner/repo/subdir` shorthand. Each plugin, however, can live in a
-subdirectory referenced by its `source` (`./plugins/board`).
+subdirectory referenced by its `source` (`./plugins/codboard`).

@@ -1,15 +1,15 @@
 ---
-name: board-report
+name: codboard-report
 description: >-
-  Write and keep fresh the Board daily report for a project, following the project's
+  Write and keep fresh the CodBoard daily report for a project, following the project's
   reportPrompt and reporting cadence. Use when asked to write or refresh the daily report,
   or after finishing a task when the cadence requires it. Uses reportPrompt and
-  automation.reportingCadence loaded by the board-workflow skill.
+  automation.reportingCadence loaded by the codboard-workflow skill.
 ---
 
-# Board — reporting
+# CodBoard — reporting
 
-There is no scheduled cutoff — **you** produce the report; Board never generates it.
+There is no scheduled cutoff — **you** produce the report; CodBoard never generates it.
 
 ## WHAT to write
 

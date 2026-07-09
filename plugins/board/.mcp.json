@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "board": {
-      "type": "http",
-      "url": "https://mcp-production-b5f9.up.railway.app/mcp"
-    }
-  }
-}

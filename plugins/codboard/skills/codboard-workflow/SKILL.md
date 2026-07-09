@@ -1,18 +1,18 @@
 ---
-name: board-workflow
+name: codboard-workflow
 description: >-
-  Load and drive the Board LLM task-tracking workflow for this repository — become its
-  watcher. Use at the start of any session that works Board tickets, or when asked to
-  watch the board, act as the board watcher, connect this repo to Board, or process a
+  Load and drive the CodBoard LLM task-tracking workflow for this repository — become its
+  watcher. Use at the start of any session that works CodBoard tickets, or when asked to
+  watch the board, act as the board watcher, connect this repo to CodBoard, or process a
   ticket. Loads the per-project workflow (statuses, transitions, playbook, automation,
-  reporting guidance) via get_workflow and orchestrates the board-task, board-watch and
-  board-report skills.
+  reporting guidance) via get_workflow and orchestrates the codboard-task, codboard-watch and
+  codboard-report skills.
 ---
 
-# Board watcher
+# CodBoard watcher
 
-You drive this repository's work through **Board**, our LLM task-tracking layer. The
-`board` MCP tools are already available — this plugin provides the server, so you do
+You drive this repository's work through **CodBoard**, our LLM task-tracking layer. The
+`codboard` MCP tools are already available — this plugin provides the server, so you do
 **not** need to add an MCP server or paste any setup prompt.
 
 ## At the start of every session — load the workflow
@@ -33,13 +33,13 @@ assuming a fixed shape.
 
 While you have active tasks on this project:
 
-- **Pick up / decompose / drive tasks** → skill **board-task**.
-- **Watch comments & apply auto-merge** → skill **board-watch**.
-- **Keep the day's report fresh** → skill **board-report**.
+- **Pick up / decompose / drive tasks** → skill **codboard-task**.
+- **Watch comments & apply auto-merge** → skill **codboard-watch**.
+- **Keep the day's report fresh** → skill **codboard-report**.
 
 ## State-machine invariants
 
 - Only follow a transition that exists in this workflow.
 - `in_progress → in_review` requires a `change_request` artifact.
 - `→ blocked` requires a reason.
-- Board never reads your CI and never merges — **you** do, then record it (see board-watch).
+- CodBoard never reads your CI and never merges — **you** do, then record it (see codboard-watch).
