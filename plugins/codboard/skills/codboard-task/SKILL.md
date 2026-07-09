@@ -50,12 +50,30 @@ Describe how to test the task or request so a human can follow, replay and valid
 - `add_test_step` once per ordered step: `targetType` (`task` | `request`), `targetId`,
   `instruction`, optional `expectedResult`, `position` for ordering, and `authorType: llm`.
   A human later moves each step's `status` `pending → passed | failed | skipped`.
-- Attach proof as `media` — **external URLs only** (`{ kind: image | video, url, caption? }`);
-  CodBoard stores the URL, never the bytes.
+- Attach proof as `media` (`{ kind: image | video, url, caption? }`). Host the media first
+  (see below) so the `url` is one a browser can load.
 - `list_test_steps` (`targetType` + `targetId`) reads the current plan;
   `update_test_step` (by `id`) edits a step — passing `media` **replaces** its whole set;
   `remove_test_step` (by `id`) drops a step and its media.
 
 Summaries, descriptions and comments render as **markdown**: embed screenshots/videos inline
-with `![alt](https://…/shot.png)` (a `.mp4`/`.webm` URL renders as an inline player), so the
-captures show up directly on the task and request pages.
+with `![alt](url)` (a `.mp4`/`.webm` URL renders as an inline player), so the captures show up
+directly on the task and request pages.
+
+## Hosting media (screenshots / videos)
+
+The CodBoard web app renders media in a browser that has **no GitHub access** — a private-repo
+URL or a CI-artifact URL will not load. Re-host such captures on CodBoard storage, then
+reference the public URL. You are the bridge: you can read the repo/artifact, CodBoard cannot.
+
+1. Bring the file into your workspace (you have repo/artifact read access — clone/checkout,
+   `gh api`, or download the artifact).
+2. `create_media_upload` with the file's `contentType` (e.g. `image/png`, `video/mp4`) → returns
+   `{ uploadUrl, publicUrl, contentType, expiresInSeconds }` (a short-lived presigned R2 URL;
+   CodBoard keeps the R2 credentials — you never handle them).
+3. Upload the bytes yourself:
+   `curl -X PUT -H "Content-Type: <contentType>" --upload-file <file> "<uploadUrl>"`.
+4. Use `publicUrl` in a test step's `media` or inline markdown.
+
+Never paste a private repo/artifact URL directly. An already-public, durable URL may be used
+as-is without re-hosting.
