@@ -53,8 +53,10 @@ function main() {
     );
   }
 
-  // ci_green / local_ci_green / without_ci: policy permits a merge. The
-  // codboard-watch skill governs the CI evidence; let it through.
+  // ci_green / local_ci_green / without_ci: a configured non-none mode IS the
+  // standing authorization to merge. Let it through with NO confirmation prompt
+  // (never return 'ask' here) — the codboard-watch skill governs the CI evidence
+  // and mandates merging without re-asking once it holds.
   emit(undefined);
 }
 
