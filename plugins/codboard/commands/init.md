@@ -102,16 +102,19 @@ that violates `autoMergeMode` (Automation) is blocked.
 
 If `CLAUDE.md` does not exist, offer to create a minimal one containing just this block.
 
-## 8. Offer the non-Claude agent + PR pointers (ask first)
+## 8. Offer a PR-template checklist line (ask first)
 
-These help agents and humans that never read `CLAUDE.md`. Offer to create/refresh, only
-with the user's ok:
+Optional, provider-agnostic, human-facing. Only with the user's ok:
 
-- `AGENTS.md` (Codex CLI and other agents) and `.github/copilot-instructions.md` — short
-  pointers to `.codboard/config.json` + the "sync at every milestone, don't copy the
-  workflow into repo files" rule. Again: pointers only, no workflow parameters.
-- `.github/PULL_REQUEST_TEMPLATE.md` — add one checklist line if the file exists (create
-  only if the user wants it): `- [ ] CodBoard task up to date (branch, PR, status, test plan) — or N/A`.
+- `.github/PULL_REQUEST_TEMPLATE.md` — if it exists, offer to add one checklist line:
+  `- [ ] CodBoard task up to date (branch, PR, status, test plan) — or N/A`. Create the file
+  only if the user explicitly wants a new template.
+
+Do **not** generate `AGENTS.md` / `.github/copilot-instructions.md` here. Coverage for
+non-Claude agents (Copilot, Cursor, Codex) is the job of CodBoard's **dedicated plugin for
+each provider** — a developer using another provider installs that provider's plugin.
+Generating cross-provider pointer files from Claude Code's init would duplicate and drift
+from those plugins.
 
 ## 9. Offer team-wide enablement via committed `.claude/settings.json` (ask first)
 

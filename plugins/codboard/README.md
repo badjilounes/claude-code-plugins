@@ -14,9 +14,10 @@ jalon. Tu **autorises la connexion dans ton navigateur** (OAuth), sans clé à c
 > board à jour » en garantie. Voir la section [Synchronisation FORTE](#synchronisation-forte-hooks--codboardinit).
 
 > **Périmètre.** Les hooks et skills ciblent **Claude Code** (CLI + Claude Code web). Les
-> agents non-Claude (Codex, Copilot) sont couverts par les pointeurs `AGENTS.md` /
-> `.github/copilot-instructions.md` que `/codboard:init` propose de générer ; côté serveur,
-> les réponses MCP portent aussi des rappels valables pour tout client MCP (Cursor, connecteur claude.ai).
+> agents non-Claude auront **leur propre plugin CodBoard dédié** (Copilot, Cursor, Codex —
+> à venir) : un dev qui utilise un autre provider installe le plugin de ce provider, donc
+> l'init de Claude Code ne génère **pas** de pointeurs à leur place. Côté serveur, les
+> réponses MCP portent aussi des rappels valables pour tout client MCP.
 
 ## Où vivent les fichiers
 
@@ -149,9 +150,10 @@ outils MCP et écrit :
   (idempotent, ré-applicable) — **des pointeurs seulement** : « lis `get_workflow`, c'est la
   source de vérité, ne recopie pas ses valeurs ici ».
 - la ligne `.gitignore` pour le ledger de session (`.codboard/session-state.json`).
-- (optionnel, sur accord) `AGENTS.md` + `.github/copilot-instructions.md` pour les agents
-  non-Claude, une ligne de checklist PR, et un `.claude/settings.json` committé pour activer
-  le plugin **pour toute l'équipe** sur clone (CLI + Claude Code web).
+- (optionnel, sur accord) une ligne de checklist PR, et un `.claude/settings.json` committé
+  pour activer le plugin **pour toute l'équipe** sur clone (CLI + Claude Code web). La
+  couverture des agents non-Claude (Copilot/Cursor/Codex) relèvera de **leurs plugins
+  dédiés**, pas de pointeurs générés ici.
 
 ### 2. Les hooks — l'application déterministe
 
