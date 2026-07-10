@@ -139,21 +139,27 @@ paramétrage (workflow, automation, testing, reporting) **reste dans CodBoard** 
 contient qu'un **pointeur** — jamais les valeurs (elles changent par projet, les recopier
 dans `CLAUDE.md` c'est se garantir un fichier qui ment).
 
-### 1. `/codboard:init` — le geste d'installation projet
+### 1. `/codboard:init` — écrit le pointeur
 
-Une commande à lancer une fois par repo. Elle résout le projet / repo / workflow via les
-outils MCP et écrit :
+Une commande à lancer une fois par repo. **Une seule interaction : sélectionner le projet**
+(et seulement s'il n'est pas résolu automatiquement — `.codboard/config.json` existant,
+argument, remote git, ou projet unique). Elle écrit alors, sans autre validation :
 
 - **`.codboard/config.json`** (committé, sans secret) : `projectId`, `repositoryId`,
   `workflowId`, `boardUrl`. C'est *la* liaison repo ↔ projet CodBoard.
-- un **bloc géré dans `CLAUDE.md`** entre `<!-- codboard:begin -->` / `<!-- codboard:end -->`
-  (idempotent, ré-applicable) — **des pointeurs seulement** : « lis `get_workflow`, c'est la
-  source de vérité, ne recopie pas ses valeurs ici ».
-- la ligne `.gitignore` pour le ledger de session (`.codboard/session-state.json`).
-- (optionnel, sur accord) une ligne de checklist PR, et un `.claude/settings.json` committé
-  pour activer le plugin **pour toute l'équipe** sur clone (CLI + Claude Code web). La
-  couverture des agents non-Claude (Copilot/Cursor/Codex) relèvera de **leurs plugins
-  dédiés**, pas de pointeurs générés ici.
+- la ligne `.gitignore` du ledger de session (`.codboard/session-state.json`) — la seule
+  partie de `.codboard/` à ne pas committer.
+
+Puis elle **s'arrête** : pas de `git add` / commit / merge — les fichiers restent en working
+tree, l'utilisateur les revoit et les commit lui-même.
+
+**Rien d'autre n'est écrit.** Pas d'édition de `CLAUDE.md` (le hook `SessionStart` lit
+`config.json` et injecte le pointeur à chaque session — un bloc dans `CLAUDE.md` serait
+redondant), pas de PR template, pas de `AGENTS.md` / `copilot-instructions.md`. Activer le
+plugin pour toute l'équipe reste une étape **optionnelle et manuelle** (le
+`.claude/settings.json` committé de la « Cible 2 » ci-dessus). Un PR template est un choix
+propre au client ; les agents non-Claude relèvent de **leurs plugins dédiés**
+(Copilot/Cursor/Codex).
 
 ### 2. Les hooks — l'application déterministe
 

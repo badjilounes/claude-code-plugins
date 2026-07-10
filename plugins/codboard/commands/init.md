@@ -1,141 +1,83 @@
 ---
-description: Bind this repository to its CodBoard project so every session (and every contributor) syncs strongly and automatically.
+description: Bind this repository to its CodBoard project by writing the .codboard/config.json pointer. The only question is which project.
 argument-hint: "[project name or id]"
-allowed-tools: Bash(git remote:*), Bash(git config:*), Read, Write, Edit
+allowed-tools: Bash(git remote:*), Read, Write, Edit
 ---
 
-# Initialise strong CodBoard sync for this repository
+# Bind this repository to its CodBoard project
 
-Goal: make this repo **strongly and automatically** tracked on CodBoard, for every
-agent and every human — not by copying the workflow into repo files, but by writing a
-small committed **pointer** the plugin's hooks and skills read at runtime. The workflow,
-automation, testing and reporting configuration stays in CodBoard (source of truth, read
-via `get_workflow`); this repo only stores *which* project/repo/workflow it maps to.
+Write the committed **pointer** `.codboard/config.json` that ties this repo to its CodBoard
+project. The plugin's hooks and skills read it at runtime; the workflow / automation /
+testing / reporting configuration stays in CodBoard (source of truth via `get_workflow`),
+never copied into the repo.
 
-Do the steps below in order. Confirm before writing files. Argument `$ARGUMENTS`, if
-given, is the target project name or id — use it to skip the picker.
+**Keep it frictionless.** The **only** thing the user does is **select their project** (and
+only if it can't be resolved automatically). Do not ask anything else. Write the file(s),
+then stop — **do not `git add`, commit, merge, or open a PR**; leave everything in the
+working tree for the user to review and commit themselves.
 
 ## 1. Check the connection
 
-Confirm the `codboard` MCP tools are available (e.g. `list_projects`). If they are not,
-stop and tell the user to authorise the CodBoard connector in the browser (first use of
-any codboard tool triggers OAuth; in an interactive session `/mcp` → codboard →
-authenticate). Do not continue without a working connection.
+Confirm the `codboard` MCP tools are available (e.g. `list_projects`). If not, stop and
+tell the user to authorise the CodBoard connector in the browser (first use of any codboard
+tool triggers OAuth; interactive: `/mcp` → codboard → authenticate).
 
-## 2. Resolve the CodBoard project
+## 2. Select the project (the only interaction)
 
-- `list_projects`. If `$ARGUMENTS` matches one by name or id, pick it. If exactly one
-  project exists, pick it. Otherwise show the list and ask the user which one.
-- Keep its `projectId`, project name, and `workspaceId`.
+Resolve automatically when possible; ask the user to pick **only** if none of these settle it:
 
-## 3. Resolve the repository binding
+1. If `.codboard/config.json` already exists, reuse its `projectId` (re-init).
+2. If `$ARGUMENTS` matches a project by name or id, use it.
+3. `list_repositories` across projects and match this repo's `git remote get-url origin`.
+4. If exactly one project exists, use it.
+5. Otherwise show the project list and let the user select one.
 
-- `git remote get-url origin` to read this repo's remote.
-- `list_repositories` for the project and match on the remote (provider + owner/name).
-- If a matching repository exists, keep its `repositoryId` and name.
-- If none matches, offer to `create_repository` for this project from the remote, then
-  keep the new id. If the user declines, record `repositoryId` as `null` and note it.
+Keep `projectId`, project name, and `workspaceId`.
 
-## 4. Read the workflow (do NOT copy its values)
+## 3. Fill in the binding (no questions)
 
-- `get_workflow` for the project. Keep only its `workflowId`.
-- Read `statuses`, `transitions`, `playbook`, `automation` (incl. `autoMergeMode`),
-  `testing` and `reportPrompt` **for this session's own use** — but never write any of
-  these values into repo files. They are per-project and change; the hooks and skills
-  re-read them via `get_workflow` each session.
+- `git remote get-url origin`, `list_repositories` for the project, match on the remote.
+  If a repository matches, keep its `repositoryId`/name; if none does, `create_repository`
+  from the remote and keep the new id (on failure, use `null`). No prompt.
+- `get_workflow` for the project and keep its `workflowId`. (Do not copy any workflow
+  values into the repo — the hooks re-read them via `get_workflow`.)
 
-## 5. Write the committed pointer `.codboard/config.json`
+## 4. Write `.codboard/config.json` (+ gitignore the ledger)
 
-Create `.codboard/config.json` (this file IS committed — it contains no secrets; auth is
-OAuth per user):
+Create the `.codboard/` folder and write `.codboard/config.json` (committed — no secrets,
+auth is OAuth per user):
 
 ```json
 {
-  "projectId": "<from step 2>",
-  "projectName": "<from step 2>",
-  "workspaceId": "<from step 2>",
-  "repositoryId": "<from step 3, or null>",
-  "repositoryName": "<from step 3>",
-  "workflowId": "<from step 4>",
+  "projectId": "<step 2>",
+  "projectName": "<step 2>",
+  "workspaceId": "<step 2>",
+  "repositoryId": "<step 3, or null>",
+  "repositoryName": "<step 3>",
+  "workflowId": "<step 3>",
   "boardUrl": "https://app.codboard.com/projects/<projectId>"
 }
 ```
 
-## 6. Keep session state out of git
+Ensure `.gitignore` contains `.codboard/session-state.json` (the hooks' local ledger — the
+only part of `.codboard/` that must NOT be committed). Append the line if absent; create
+`.gitignore` if missing. This is the only other write.
 
-Ensure `.gitignore` contains `\.codboard/session-state.json` (the hooks' local ledger —
-never committed). Create `.gitignore` if missing; append the line if absent. Do not
-ignore `.codboard/config.json`.
+Nothing else is written: no `CLAUDE.md` edit (the SessionStart hook injects the pointer
+from `config.json` every session, so it is redundant), no PR template, no `AGENTS.md` /
+`copilot-instructions.md` (a PR template is the client's own choice; non-Claude agents are
+covered by their own per-provider CodBoard plugin).
 
-## 7. Insert the managed pointer block in `CLAUDE.md`
+## 5. Summarise
 
-If `CLAUDE.md` exists, insert (or refresh, idempotently) this block between the markers.
-If it exists already, replace everything between the markers rather than duplicating.
-**The block contains only pointers — never the workflow parameters themselves.**
+Report the resolved project / repo / workflow ids and that `.codboard/config.json` (+ the
+`.gitignore` line) was written. Then state the manual next steps — **which this command
+does not perform**:
 
-```markdown
-<!-- codboard:begin -->
-## CodBoard sync (MANDATORY)
-
-This repository is tracked on CodBoard, project **<projectName>** (see
-`.codboard/config.json`). The CodBoard plugin drives the sync.
-
-The **four** config areas below live **in CodBoard** and are the source of truth. Read
-them at the start of a session with `get_workflow` and follow them. **Never copy their
-values into this file or any repo file** — they are per-project and change.
-
-- **Workflow** — `statuses`, `transitions` (guarded), `playbook`.
-- **Automation** — `autoMergeMode`, `watch`, `autoCreatePr`, `ciCheckName`.
-- **Testing** — `testing.testPlans` (never|when_possible|always), `testing.capture.{screenshots,video}` (off|when_possible|required).
-- **Report** — `reportPrompt` + `automation.reportingCadence` (on_task_finished|on_each_note|manual).
-
-Push every dev milestone to CodBoard the moment it happens (branch, PR, status, test plan,
-capture, done, report) — do not batch it to the end. Do not merge a PR unless
-`automation.autoMergeMode` allows it; when it is `none`, the owner merges.
-
-Plugin hooks enforce this deterministically: the turn is blocked from ending while a
-created branch/PR is unmirrored (Workflow), a finished task lacks a required test plan or
-capture (Testing), or the daily report is stale versus the cadence (Report); and a merge
-that violates `autoMergeMode` (Automation) is blocked.
-<!-- codboard:end -->
-```
-
-If `CLAUDE.md` does not exist, offer to create a minimal one containing just this block.
-
-## 8. Offer a PR-template checklist line (ask first)
-
-Optional, provider-agnostic, human-facing. Only with the user's ok:
-
-- `.github/PULL_REQUEST_TEMPLATE.md` — if it exists, offer to add one checklist line:
-  `- [ ] CodBoard task up to date (branch, PR, status, test plan) — or N/A`. Create the file
-  only if the user explicitly wants a new template.
-
-Do **not** generate `AGENTS.md` / `.github/copilot-instructions.md` here. Coverage for
-non-Claude agents (Copilot, Cursor, Codex) is the job of CodBoard's **dedicated plugin for
-each provider** — a developer using another provider installs that provider's plugin.
-Generating cross-provider pointer files from Claude Code's init would duplicate and drift
-from those plugins.
-
-## 9. Offer team-wide enablement via committed `.claude/settings.json` (ask first)
-
-So the whole team gets the plugin on clone (CLI and Claude Code web), offer to add to a
-committed `.claude/settings.json` (merge, do not clobber existing keys):
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "badjilounes": { "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" } }
-  },
-  "enabledPlugins": { "codboard@badjilounes": true }
-}
-```
-
-Mention that Claude Code web also needs network access to `mcp.codboard.com` allowed in
-the environment, and OAuth authorised once in the browser.
-
-## 10. Summarise
-
-Report what was written (`.codboard/config.json`, `.gitignore` line, CLAUDE.md block, and
-any optional files), the resolved project/repo/workflow ids, and the two remaining manual
-steps: authorise the OAuth connector once in the browser, and commit these files so the
-whole team is covered. Suggest committing on a branch + PR per the repo's own workflow.
+- authorise the OAuth connector once in the browser (Claude Code web also needs network
+  access to `mcp.codboard.com` allowed);
+- review and commit `.codboard/config.json` yourself;
+- optional, to enable the plugin for the whole team on clone, add to a committed
+  `.claude/settings.json`: `extraKnownMarketplaces.badjilounes` →
+  `{ "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" } }` and
+  `enabledPlugins["codboard@badjilounes"] = true`.
