@@ -17,7 +17,11 @@ You drive this repository's work through **CodBoard**, our LLM task-tracking lay
 
 ## At the start of every session — load the workflow
 
-1. `list_projects` and pick the project this repository belongs to. Remember its `projectId`.
+1. Resolve the project. If this repo has been initialised (`/codboard:init`), read
+   `.codboard/config.json` at the repo root and use its `projectId` / `workflowId` /
+   `repositoryId` directly — that committed pointer is the binding, don't re-guess. Only
+   if it is missing, `list_projects` and pick the project this repository belongs to (and
+   suggest running `/codboard:init` to make the binding permanent). Remember its `projectId`.
 2. `get_workflow` for that project. Read the whole definition and keep it for the session:
    - **statuses / transitions** — the state machine you must stay within.
    - **playbook** — how to decompose a request and drive work (events `request.created`,
