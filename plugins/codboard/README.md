@@ -14,9 +14,10 @@ jalon. Tu **autorises la connexion dans ton navigateur** (OAuth), sans clé à c
 > board à jour » en garantie. Voir la section [Synchronisation FORTE](#synchronisation-forte-hooks--codboardinit).
 
 > **Périmètre.** Les hooks et skills ciblent **Claude Code** (CLI + Claude Code web). Les
-> agents non-Claude (Codex, Copilot) sont couverts par les pointeurs `AGENTS.md` /
-> `.github/copilot-instructions.md` que `/codboard:init` propose de générer ; côté serveur,
-> les réponses MCP portent aussi des rappels valables pour tout client MCP (Cursor, connecteur claude.ai).
+> agents non-Claude auront **leur propre plugin CodBoard dédié** (Copilot, Cursor, Codex —
+> à venir) : un dev qui utilise un autre provider installe le plugin de ce provider, donc
+> l'init de Claude Code ne génère **pas** de pointeurs à leur place. Côté serveur, les
+> réponses MCP portent aussi des rappels valables pour tout client MCP.
 
 ## Où vivent les fichiers
 
@@ -138,20 +139,27 @@ paramétrage (workflow, automation, testing, reporting) **reste dans CodBoard** 
 contient qu'un **pointeur** — jamais les valeurs (elles changent par projet, les recopier
 dans `CLAUDE.md` c'est se garantir un fichier qui ment).
 
-### 1. `/codboard:init` — le geste d'installation projet
+### 1. `/codboard:init` — écrit le pointeur
 
-Une commande à lancer une fois par repo. Elle résout le projet / repo / workflow via les
-outils MCP et écrit :
+Une commande à lancer une fois par repo. **Une seule interaction : sélectionner le projet**
+(et seulement s'il n'est pas résolu automatiquement — `.codboard/config.json` existant,
+argument, remote git, ou projet unique). Elle écrit alors, sans autre validation :
 
 - **`.codboard/config.json`** (committé, sans secret) : `projectId`, `repositoryId`,
   `workflowId`, `boardUrl`. C'est *la* liaison repo ↔ projet CodBoard.
-- un **bloc géré dans `CLAUDE.md`** entre `<!-- codboard:begin -->` / `<!-- codboard:end -->`
-  (idempotent, ré-applicable) — **des pointeurs seulement** : « lis `get_workflow`, c'est la
-  source de vérité, ne recopie pas ses valeurs ici ».
-- la ligne `.gitignore` pour le ledger de session (`.codboard/session-state.json`).
-- (optionnel, sur accord) `AGENTS.md` + `.github/copilot-instructions.md` pour les agents
-  non-Claude, une ligne de checklist PR, et un `.claude/settings.json` committé pour activer
-  le plugin **pour toute l'équipe** sur clone (CLI + Claude Code web).
+- la ligne `.gitignore` du ledger de session (`.codboard/session-state.json`) — la seule
+  partie de `.codboard/` à ne pas committer.
+
+Puis elle **s'arrête** : pas de `git add` / commit / merge — les fichiers restent en working
+tree, l'utilisateur les revoit et les commit lui-même.
+
+**Rien d'autre n'est écrit.** Pas d'édition de `CLAUDE.md` (le hook `SessionStart` lit
+`config.json` et injecte le pointeur à chaque session — un bloc dans `CLAUDE.md` serait
+redondant), pas de PR template, pas de `AGENTS.md` / `copilot-instructions.md`. Activer le
+plugin pour toute l'équipe reste une étape **optionnelle et manuelle** (le
+`.claude/settings.json` committé de la « Cible 2 » ci-dessus). Un PR template est un choix
+propre au client ; les agents non-Claude relèvent de **leurs plugins dédiés**
+(Copilot/Cursor/Codex).
 
 ### 2. Les hooks — l'application déterministe
 
