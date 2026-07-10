@@ -55,7 +55,7 @@ auth is OAuth per user):
   "repositoryId": "<step 3, or null>",
   "repositoryName": "<step 3>",
   "workflowId": "<step 3>",
-  "boardUrl": "https://app.codboard.com/projects/<projectId>"
+  "boardUrl": "https://codboard.com/projects/<projectId>/board"
 }
 ```
 
