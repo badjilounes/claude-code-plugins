@@ -35,7 +35,7 @@ function main() {
   if (!MERGE_RE.test(command)) emit(undefined); // not a merge
 
   const state = readState(input);
-  const mode = state.autoMergeMode;
+  const mode = (state.policy && state.policy.autoMergeMode) ?? state.autoMergeMode;
 
   if (mode === 'none') {
     deny(

@@ -163,12 +163,24 @@ committé) alimenté par ce qu'ils observent des appels d'outils.
 | --- | --- | --- |
 | `session-start` | `SessionStart` | Chaque session d'un repo tracké démarre en connaissant CodBoard et l'ordre d'appeler `get_workflow` — sans dépendre du déclenchement d'une skill. Repo non initialisé ⇒ propose `/codboard:init`. |
 | `post-bash` | `PostToolUse(Bash)` | Consigne « branche créée » / « PR ouverte » dans le ledger et pousse un rappel juste-à-temps (une fois par jalon). |
-| `post-codboard` | `PostToolUse(mcp __*codboard*__)` | Solde le jalon quand `set_task_branch` / `set_task_pull_request` est appelé ; met en cache `automation.autoMergeMode` lu depuis `get_workflow`. |
+| `post-codboard` | `PostToolUse(mcp __*codboard*__)` | Met en cache **les 4 sections** de `get_workflow` (Workflow/Automation/Testing/Report) dans le ledger, et solde les obligations au fil des appels (`set_task_branch`, `set_task_pull_request`, `add_test_step`, `create_media_upload`, `upsert_report`, `complete_execution`/`change_task_status`→terminal). |
 | `pre-merge-guard` | `PreToolUse(Bash)` | Intercepte `gh pr merge` : **deny** si `autoMergeMode: none`, **ask** si la politique n'a pas encore été lue. |
-| `stop-check` | `Stop` | **Bloque la fin du tour** tant qu'un jalon consigné (branche, PR) n'a pas été mirroré sur CodBoard. Garde anti-boucle via `stop_hook_active`. |
+| `stop-check` | `Stop` | **Bloque la fin du tour** tant qu'une obligation des 4 sections n'est pas remplie (branche/PR non mirroré, plan de test/capture manquant si requis, report périmé vs cadence). Garde anti-boucle via `stop_hook_active`. |
+
+Les 4 sections de config sont **lues via `get_workflow`** (jamais figées) et mappées à
+l'enforcement :
+
+| Section | Champs | Ce que les hooks en font |
+| --- | --- | --- |
+| **Workflow** | `statuses`, `transitions`, `playbook` | Gate branche/PR au `Stop`. Les transitions gardées (artefact `change_request`, `reason`) sont validées **côté serveur** au `change_task_status`. |
+| **Automation** | `autoMergeMode`, `watch`, `reportingCadence` | `autoMergeMode` → garde de merge. `reportingCadence` → alimente le gate Report. |
+| **Testing** | `testing.testPlans`, `testing.capture.{screenshots,video}` | Une tâche finie sans plan de test (`always`) ou sans capture (`required`) bloque le `Stop`. |
+| **Report** | `reportPrompt`, `reportingCadence` | Après une fin de tâche (ou chaque note, selon la cadence), un report périmé bloque le `Stop` — sauf cadence `manual`. |
 
 Tous les hooks **no-op** hors d'un repo tracké (pas de `.codboard/config.json`) et
-n'échouent jamais une session (toute erreur interne → sortie 0 silencieuse).
+n'échouent jamais une session (toute erreur interne → sortie 0 silencieuse). Les gates
+Testing/Report ne s'activent qu'une fois `get_workflow` lu (politique inconnue ⇒ pas de
+blocage surprise) ; les gates branche/PR et la garde de merge sont toujours actifs.
 
 ### 3. Filet côté serveur
 

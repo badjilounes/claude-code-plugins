@@ -80,18 +80,23 @@ If it exists already, replace everything between the markers rather than duplica
 This repository is tracked on CodBoard, project **<projectName>** (see
 `.codboard/config.json`). The CodBoard plugin drives the sync.
 
-- The workflow configuration — statuses, transitions, playbook, `automation`
-  (`autoMergeMode`, watch, reporting), `testing`, `reportPrompt` — lives **in CodBoard**
-  and is the source of truth. Read it at the start of a session with `get_workflow` and
-  follow it. **Never copy those values into this file or any repo file** — they are
-  per-project and change.
-- Push every dev milestone to CodBoard the moment it happens (branch, PR, status, test
-  plan, proof, done). Do not batch it to the end.
-- Do not merge a PR unless `automation.autoMergeMode` allows it; when it is `none`, the
-  owner merges.
+The **four** config areas below live **in CodBoard** and are the source of truth. Read
+them at the start of a session with `get_workflow` and follow them. **Never copy their
+values into this file or any repo file** — they are per-project and change.
 
-Plugin hooks record git/PR milestones locally and will block the turn from ending, or a
-non-conforming merge, while the board is out of sync.
+- **Workflow** — `statuses`, `transitions` (guarded), `playbook`.
+- **Automation** — `autoMergeMode`, `watch`, `autoCreatePr`, `ciCheckName`.
+- **Testing** — `testing.testPlans` (never|when_possible|always), `testing.capture.{screenshots,video}` (off|when_possible|required).
+- **Report** — `reportPrompt` + `automation.reportingCadence` (on_task_finished|on_each_note|manual).
+
+Push every dev milestone to CodBoard the moment it happens (branch, PR, status, test plan,
+capture, done, report) — do not batch it to the end. Do not merge a PR unless
+`automation.autoMergeMode` allows it; when it is `none`, the owner merges.
+
+Plugin hooks enforce this deterministically: the turn is blocked from ending while a
+created branch/PR is unmirrored (Workflow), a finished task lacks a required test plan or
+capture (Testing), or the daily report is stale versus the cadence (Report); and a merge
+that violates `autoMergeMode` (Automation) is blocked.
 <!-- codboard:end -->
 ```
 
