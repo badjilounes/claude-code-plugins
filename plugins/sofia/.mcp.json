@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sofia": {
+      "command": "node",
+      "args": ["${SOFIA_MCP_SERVER_PATH}"],
+      "env": {
+        "SOPHIA_API_URL": "${SOPHIA_API_URL:-http://localhost:3000/api}",
+        "SOPHIA_EMAIL": "${SOPHIA_EMAIL}",
+        "SOPHIA_PASSWORD": "${SOPHIA_PASSWORD}"
+      }
+    }
+  }
+}

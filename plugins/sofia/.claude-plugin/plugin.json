@@ -1,0 +1,13 @@
+{
+  "name": "sofia",
+  "displayName": "Sofia",
+  "version": "0.1.0",
+  "description": "Drive Sofia — the multi-channel AI social-publishing platform — from Claude Code. Discover what Sofia can do, create AI-driven campaigns (missions), validate or reject the proposed plan, and create and publish posts across Instagram, X, LinkedIn, TikTok and Facebook. Bundles the Sofia MCP server (local stdio) and a campaign skill.",
+  "author": {
+    "name": "Sofia",
+    "email": "support@sofia-post.com"
+  },
+  "homepage": "https://sofia-post.com",
+  "repository": "https://github.com/badjilounes/claude-code-plugins",
+  "keywords": ["mcp", "sofia", "social-media", "publishing", "campaigns", "ai", "claude-code"]
+}
