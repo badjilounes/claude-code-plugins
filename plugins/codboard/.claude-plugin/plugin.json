@@ -1,8 +1,8 @@
 {
   "name": "codboard",
   "displayName": "CodBoard",
-  "version": "0.2.1",
-  "description": "Give Claude an audited task board for the tickets it works, with strong automatic sync: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs and act on new comments. `/codboard:init` binds a repo to its project; deterministic hooks inject the workflow at session start, block a turn from ending while a milestone is unsynced, and block a merge that violates the project's policy. Bundles the CodBoard MCP server and its watcher workflow as on-demand skills.",
+  "version": "0.3.0",
+  "description": "Give Claude an audited task board for the tickets it works, with strong automatic sync: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs, drain agent directives (requested PR create/merge), and act on new comments. `/codboard:init` binds a repo to its project; deterministic hooks inject the workflow at session start, block a turn from ending while a milestone is unsynced, and block a merge that violates the project's policy. Bundles the CodBoard MCP server and its watcher workflow as on-demand skills.",
   "author": {
     "name": "CodBoard",
     "email": "support@codboard.com"

@@ -1,24 +1,50 @@
 ---
 name: codboard-watch
 description: >-
-  Run the CodBoard watch loop — re-read task and request comments and act on them, and apply
-  the project's auto-merge policy to open PRs. Use when watching the board, polling for new
-  comments, or deciding whether to merge a task's PR. Uses the automation policy loaded by
-  the codboard-workflow skill.
+  Run the CodBoard watch loop — drain the two inboxes (comments and agent directives) and act
+  on them, and apply the project's auto-create / auto-merge policy to task PRs. Use when
+  watching the board, polling for new comments or directives, or deciding whether to open or
+  merge a task's PR. Uses the automation policy loaded by the codboard-workflow skill.
 ---
 
 # CodBoard — watch loop
 
 Loop while you have active tasks; follow `automation.watch.pollHint` (from `get_workflow`)
-for cadence.
+for cadence. Each poll drains **two inboxes** — comments (free-form) and directives
+(structured) — then applies the **standing policy** (config). CodBoard records intentions and
+your declarations; **it never touches the forge** — you execute (ADR 0007/0010).
 
-## Comments
+## Comments — free-form inbox
 
 For each task / request you handle, re-read its comments with `list_comments`. When a new
 comment asks for something, do it, then reflect the result on CodBoard — a status change, a
 reply comment, or a work note.
 
-## Auto-merge — apply `automation.autoMergeMode`
+## Directives — structured inbox (the one-off trigger)
+
+Call `list_pending_directives(projectId)` each poll. A directive is a recorded intention you
+execute, then resolve:
+
+- **`create_pr`** on a task — open the PR yourself (e.g. `gh pr create`, base = the
+  repository main branch), declare it with
+  `set_task_pull_request({ pullRequestUrl, pullRequestStatus: "open" })` + attach a
+  `change_request` artifact, then `resolve_task_directive(id)`.
+- **`merge_pr`** (only ever recorded when the PR is open) — verify CI exactly as
+  `automation.autoMergeMode` requires (see below), `gh pr merge`, declare
+  `set_task_pull_request({ pullRequestStatus: "merged" })`, move the task to the terminal
+  status, then `resolve_task_directive(id)`. Attach the same `ci` evidence as an auto-merge.
+- Use `cancel_task_directive(id)` for a directive that should no longer run.
+
+Request-level mass actions (`fan_out_request_directives`) simply fan these out to every
+eligible task; drain the resulting per-task directives the same way.
+
+## Standing policy — `automation.autoCreatePr` + `automation.autoMergeMode`
+
+The config is the **permanent trigger** — the same execution as a directive, driven by policy
+instead of a one-off ask. If `automation.autoCreatePr` is true, open the PR for each ready
+task without one (as above) without waiting for a directive.
+
+Then apply `automation.autoMergeMode` to each task whose PR is open.
 
 CodBoard never reads your CI and never merges — **you** do.
 

@@ -26,7 +26,7 @@ You drive this repository's work through **CodBoard**, our LLM task-tracking lay
    - **statuses / transitions** — the state machine you must stay within.
    - **playbook** — how to decompose a request and drive work (events `request.created`,
      `task.started`, `task.finished`).
-   - **automation** — `{ autoMergeMode, ciCheckName, watch { comments, pollHint }, reportingCadence }`
+   - **automation** — `{ autoCreatePr, autoMergeMode, ciCheckName, watch { comments, pollHint }, reportingCadence }`
      — the policy you apply. Never hardcode it; it is per-project and can change.
    - **reportPrompt** — the user-configured reporting guidance you MUST follow.
 
