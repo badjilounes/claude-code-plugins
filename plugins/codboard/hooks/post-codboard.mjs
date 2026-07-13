@@ -101,6 +101,23 @@ function main() {
   }
 
   writeState(input, state);
+
+  // D1 (ADR 0044): a status change makes CodBoard's read-only remote mirrors
+  // (the ticket status and the PR state) stale. The hook never reads the remote
+  // nor calls the API — it reminds the agent, which IS connected, to redeclare
+  // them so the badges stay fresh. CodBoard never reads the board/forge itself.
+  if (suffix === 'change_task_status' || suffix === 'change_request_status') {
+    emit({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext:
+          'CodBoard: status changed — redeclare the remote-board mirrors so the read-only badges stay fresh (ADR 0044). ' +
+          'Read the current remote state with your own credentials, then declare it back: the ticket status via ' +
+          '`update_request` (remoteStatus), and the pull-request state via `set_task_pull_request`. ' +
+          'CodBoard never reads the board or forge itself.',
+      },
+    });
+  }
   emit(undefined);
 }
 
