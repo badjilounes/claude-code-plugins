@@ -180,7 +180,7 @@ l'enforcement :
 
 | Section | Champs | Ce que les hooks en font |
 | --- | --- | --- |
-| **Workflow** | `statuses`, `transitions`, `playbook` | Gate branche/PR au `Stop`. Les transitions gardées (artefact `change_request`, `reason`) sont validées **côté serveur** au `change_task_status`. |
+| **Workflow** | `statuses`, `transitions` (+ `policy`), `playbook` | Gate branche/PR au `Stop`. Un projet peut porter **plusieurs workflows nommés** (`list_workflows`, `get_workflow({ taskId })`). Chaque transition est validée **côté serveur** au `change_task_status` : gardes d'evidence (artefact `change_request`, `reason`, preuves `branch`/`pullRequest`/`tests` sous `strict`) **et** policy d'exécution — `human_only`/rôles/`agentId` et approbation humaine (`human_approval` via directive `approve_transition`) refusent le franchissement (403). |
 | **Automation** | `autoMergeMode`, `watch`, `reportingCadence` | `autoMergeMode` → garde de merge. Un mode non-`none` **vaut mandat** : contrainte satisfaite ⇒ merge **sans redemander** (seul `none` = merge par l'owner). `reportingCadence` → alimente le gate Report. |
 | **Testing** | `testing.testPlans`, `testing.capture.{screenshots,video}` | Une tâche finie sans plan de test (`always`) ou sans capture (`required`) bloque le `Stop`. |
 | **Report** | `reportPrompt`, `reportingCadence` | Après une fin de tâche (ou chaque note, selon la cadence), un report périmé bloque le `Stop` — sauf cadence `manual`. |
