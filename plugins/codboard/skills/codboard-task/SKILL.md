@@ -11,7 +11,10 @@ description: >-
 # CodBoard — task lifecycle
 
 Runtime policy comes from `get_workflow` (loaded by the **codboard-workflow** skill). Apply
-this project's statuses, transitions and playbook — do not invent states.
+this project's statuses, transitions and playbook — do not invent states. A project may hold
+several named workflows, so resolve the one governing THIS task with
+`get_workflow({ projectId, taskId })` and honour its per-transition **execution policy**
+(codboard-workflow › "Transition execution policy") — the server enforces it.
 
 ## Turn a ticket into work
 
@@ -20,9 +23,27 @@ this project's statuses, transitions and playbook — do not invent states.
 
 ## Start a task
 
-3. Move it to the workflow's in-progress status (`change_task_status`).
+3. Move it to the workflow's in-progress status (`change_task_status`). If the transition
+   pins an agent (`policy.agent.agentId`), pass your registered `agentId`; if it needs
+   proofs or human approval, see **Governed transitions** below.
 4. `set_task_branch` — branch `{type}/{slug}` per the playbook.
 5. `record_work_note` with kind `started` and a one-line summary.
+
+## Governed transitions
+
+Before a `change_task_status`, read the target transition's policy (from the task's workflow).
+The server refuses a move whose policy is not met, so satisfy it first:
+
+- **Assigned agent** (`policy.agent.agentId`) — pass that id as `agentId` on `change_task_status`;
+  another agent (or none) is refused with `forbidden`.
+- **Proofs** (`policy.proofs`) — attach the branch, open the PR, and/or make tests green before
+  the move. Under a `strict` transition a missing proof is refused (`invalid`).
+- **Human approval** (`actor: human_approval`) — you propose, a human decides:
+  1. `create_task_directive(taskId, kind: "approve_transition", payload: { toStatus })`.
+  2. Wait — poll `list_task_directives(taskId)` (or `list_pending_directives`) until that
+     directive is `resolved` (a human resolves it, or you keep working other tasks meanwhile).
+  3. Then retry `change_task_status`; it now passes. An unapproved move is refused (`forbidden`).
+- **Human-only** (`actor: human_only`) — do not attempt as an agent; comment to ask the human.
 
 ## Presence — declare that you are working
 
@@ -38,7 +59,8 @@ If you stop pinging, the task shows stale, then offline, on its own.
 
 9. Open the PR and `set_task_pull_request`.
 10. Move to the in-review / terminal status, respecting transitions
-    (`in_progress → in_review` needs a `change_request` artifact).
+    (`in_progress → in_review` needs a `change_request` artifact) **and their execution
+    policy** (proofs / assigned agent / human approval — see **Governed transitions**).
 11. `record_work_note` with kind `finished`.
 12. Attach a **test plan** so a human can replay and validate → see below.
 13. Then refresh the report per cadence → skill **codboard-report**.

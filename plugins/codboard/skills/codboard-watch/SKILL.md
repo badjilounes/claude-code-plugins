@@ -33,6 +33,9 @@ execute, then resolve:
   `automation.autoMergeMode` requires (see below), `gh pr merge`, declare
   `set_task_pull_request({ pullRequestStatus: "merged" })`, move the task to the terminal
   status, then `resolve_task_directive(id)`. Attach the same `ci` evidence as an auto-merge.
+- **`approve_transition`** — a governed transition awaiting **human** approval (you proposed
+  it). Do **not** resolve it yourself — a human decides. Skip it in the drain loop and keep
+  polling; once a human resolves it, retry the `change_task_status` it gates.
 - Use `cancel_task_directive(id)` for a directive that should no longer run.
 
 Request-level mass actions (`fan_out_request_directives`) simply fan these out to every
