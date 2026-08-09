@@ -58,9 +58,21 @@ While you have active tasks on this project:
 ## Transition execution policy — the server enforces it
 
 A transition can carry a `policy` and an `actor`. On `change_task_status` the server now
-**refuses** (not just advises) a move whose policy is not satisfied. Read the policy first and
-act accordingly — a refusal comes back as an error (`forbidden` = you may not; `invalid` =
-the world isn't ready yet):
+**refuses** (not just advises) a move whose policy is not satisfied. Never discover that by
+being refused: call **`get_transition_policy({ id, toStatus, reason? })`** first — it changes
+nothing and answers what the move demands and what is still missing:
+
+```
+{ mode, actor, requires, proofs, performRoles,
+  missing: ["branch", "pull request", "green tests"],   // in reporting order
+  approvalGranted, wouldBlock }
+```
+
+`missing` is your remaining definition of done for that move; `wouldBlock` tells you whether
+the move would be refused as things stand. Pass the `reason` you intend to send, since a
+`requires.reason` guard is only satisfiable at call time. Then act on what you read — a
+refusal comes back as an error (`forbidden` = you may not; `invalid` = the world isn't ready
+yet):
 
 - **`actor: human_only`** — only a human can cross it. As an agent, do **not** attempt it;
   leave a comment asking the human to move it.
@@ -68,10 +80,22 @@ the world isn't ready yet):
   an approval directive and wait (see codboard-task), then retry.
 - **`policy.human.perform` / `.approve`** — restricts which project roles (admin/editor/viewer)
   may perform/approve. Enforced from the authenticated caller, not something you can set.
-- **`policy.agent.agentId`** — the transition is pinned to one registered agent. Pass that
-  agent's id as `agentId` on `change_task_status`; another agent is refused.
 - **`policy.agent.capabilities` / `.execution`** — **guidance only**, never blocking
   (capabilities are matching, not a security boundary). Use them to pick the right agent.
 - **`policy.proofs` { branch, pullRequest, tests }** — required observed evidence before the
   move. Under a `strict` transition a missing proof **blocks**; under `advisory` it is only
   audited. Attach the branch / open the PR / make tests green first.
+
+## Auto-run — does this project hand out work?
+
+`automation.autoRun` says whether an agent may claim work from the project's queue, and how:
+
+- **`mode`** — `off` (default: nothing is claimable) | `on_demand` (only tasks a human queued)
+  | `eligible` (any task sitting in one of `statuses`).
+- **`leaseMinutes`** — how long a claim holds before the task returns to the queue (30 by default).
+- **`maxConcurrent`** — ceiling on tasks held simultaneously across the project.
+- **`statuses`** — which statuses are claimable in `eligible` mode.
+
+Enforced server-side: claiming is refused when the mode is `off` or the ceiling is reached.
+CodBoard never starts an agent and never reassigns a task — see codboard-task › "Take work
+from the queue".

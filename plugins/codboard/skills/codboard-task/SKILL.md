@@ -16,6 +16,27 @@ several named workflows, so resolve the one governing THIS task with
 `get_workflow({ projectId, taskId })` and honour its per-transition **execution policy**
 (codboard-workflow › "Transition execution policy") — the server enforces it.
 
+## Take work from the queue (auto-run)
+
+A project can hand out work instead of you picking a ticket by hand. Call
+**`claim_next_task({ projectId, claimedBy })`**: CodBoard decides whether there is something
+you may take, and for how long you hold it.
+
+- `{ task, reason: "claimed" }` — it is yours until `task.leaseExpiresAt`. Work it like any
+  other task (start → branch → proofs → finish).
+- `reason: "auto_run_off"` — this project does not hand out work. **Stop asking**; pick tickets
+  the usual way.
+- `reason: "max_concurrent_reached"` — the project's ceiling is reached. Try later.
+- `reason: "nothing_claimable"` — the queue is empty right now.
+
+Two agents never receive the same task: the claim is atomic. If you give up before finishing,
+`queue_task({ id, queued: false })` returns it to the queue immediately instead of waiting for
+the lease to expire. `queue_task({ id, queued: true })` sends a task to the queue.
+
+The policy lives in `automation.autoRun` of the governing workflow (`mode` off | on_demand |
+eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) — read it, never assume it. CodBoard
+never starts you: you ask, it answers.
+
 ## Turn a ticket into work
 
 1. For every ticket you pick up, `create_request` and set its `type` (e.g. `bug` / `feature`).
@@ -23,19 +44,18 @@ several named workflows, so resolve the one governing THIS task with
 
 ## Start a task
 
-3. Move it to the workflow's in-progress status (`change_task_status`). If the transition
-   pins an agent (`policy.agent.agentId`), pass your registered `agentId`; if it needs
-   proofs or human approval, see **Governed transitions** below.
+3. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
+   with `get_transition_policy` if it may need proofs or human approval — see **Governed
+   transitions** below.
 4. `set_task_branch` — branch `{type}/{slug}` per the playbook.
 5. `record_work_note` with kind `started` and a one-line summary.
 
 ## Governed transitions
 
-Before a `change_task_status`, read the target transition's policy (from the task's workflow).
-The server refuses a move whose policy is not met, so satisfy it first:
+Before a `change_task_status`, call **`get_transition_policy({ id, toStatus, reason? })`**:
+it changes nothing and returns `missing` (everything the move still lacks) and `wouldBlock`.
+The server refuses a move whose policy is not met, so satisfy what it lists first:
 
-- **Assigned agent** (`policy.agent.agentId`) — pass that id as `agentId` on `change_task_status`;
-  another agent (or none) is refused with `forbidden`.
 - **Proofs** (`policy.proofs`) — attach the branch, open the PR, and/or make tests green before
   the move. Under a `strict` transition a missing proof is refused (`invalid`).
 - **Human approval** (`actor: human_approval`) — you propose, a human decides:
