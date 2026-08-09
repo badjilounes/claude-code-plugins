@@ -64,7 +64,7 @@ nothing and answers what the move demands and what is still missing:
 
 ```
 { mode, actor, requires, proofs, performRoles,
-  missing: ["branch", "pull request", "green tests"],   // in reporting order
+  missing: ["branch", "pull request", "green tests", "settled acceptance criteria"],  // in reporting order
   approvalGranted, wouldBlock }
 ```
 
@@ -76,15 +76,19 @@ yet):
 
 - **`actor: human_only`** — only a human can cross it. As an agent, do **not** attempt it;
   leave a comment asking the human to move it.
+- **`actor: agent_only`** — the mirror case: the edge is automated and a human is refused on
+  it. Nothing changes for you — cross it as usual.
 - **`actor: human_approval`** — you *propose*, a human approves before it takes effect. Create
   an approval directive and wait (see codboard-task), then retry.
-- **`policy.human.perform` / `.approve`** — restricts which project roles (admin/editor/viewer)
-  may perform/approve. Enforced from the authenticated caller, not something you can set.
-- **`policy.agent.capabilities` / `.execution`** — **guidance only**, never blocking
-  (capabilities are matching, not a security boundary). Use them to pick the right agent.
-- **`policy.proofs` { branch, pullRequest, tests }** — required observed evidence before the
-  move. Under a `strict` transition a missing proof **blocks**; under `advisory` it is only
-  audited. Attach the branch / open the PR / make tests green first.
+- **`policy.human.perform`** — restricts which project roles (admin/editor/viewer) may perform
+  the move. Enforced from the authenticated caller, not something you can set.
+- **`policy.proofs` { branch, pullRequest, tests, acceptanceCriteria }** — required observed
+  evidence before the move. Under a `strict` transition a missing proof **blocks**; under
+  `advisory` it is only audited. Attach the branch / open the PR / make tests green first.
+  `acceptanceCriteria` is satisfied once the request carries at least one criterion and none
+  is left `pending` or `failed` — settle each one (`update_acceptance_criterion`) rather than
+  closing the ticket over an unanswered criterion. A `waived` criterion counts as settled,
+  since it already carries its reason.
 
 ## Auto-run — does this project hand out work?
 

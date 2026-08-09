@@ -40,15 +40,19 @@ never starts you: you ask, it answers.
 ## Turn a ticket into work
 
 1. For every ticket you pick up, `create_request` and set its `type` (e.g. `bug` / `feature`).
-2. Break it into tasks per the playbook (by context / layer). `create_task` per unit of work.
+2. State what the work will have to prove **before** decomposing it: `add_acceptance_criterion`
+   ({ requestId, given?, when?, then }) once per criterion. Each gets a stable handle (`AC1`,
+   `AC2`, …) that is never reused, so a criterion can be cited in a PR, a test step or a report
+   and still mean the same thing later. `list_acceptance_criteria` reads them back.
+3. Break it into tasks per the playbook (by context / layer). `create_task` per unit of work.
 
 ## Start a task
 
-3. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
+4. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
    with `get_transition_policy` if it may need proofs or human approval — see **Governed
    transitions** below.
-4. `set_task_branch` — branch `{type}/{slug}` per the playbook.
-5. `record_work_note` with kind `started` and a one-line summary.
+5. `set_task_branch` — branch `{type}/{slug}` per the playbook.
+6. `record_work_note` with kind `started` and a one-line summary.
 
 ## Governed transitions
 
@@ -56,34 +60,42 @@ Before a `change_task_status`, call **`get_transition_policy({ id, toStatus, rea
 it changes nothing and returns `missing` (everything the move still lacks) and `wouldBlock`.
 The server refuses a move whose policy is not met, so satisfy what it lists first:
 
-- **Proofs** (`policy.proofs`) — attach the branch, open the PR, and/or make tests green before
-  the move. Under a `strict` transition a missing proof is refused (`invalid`).
+- **Proofs** (`policy.proofs`) — attach the branch, open the PR, make tests green and/or settle
+  the request's acceptance criteria before the move. Under a `strict` transition a missing proof
+  is refused (`invalid`).
 - **Human approval** (`actor: human_approval`) — you propose, a human decides:
   1. `create_task_directive(taskId, kind: "approve_transition", payload: { toStatus })`.
   2. Wait — poll `list_task_directives(taskId)` (or `list_pending_directives`) until that
      directive is `resolved` (a human resolves it, or you keep working other tasks meanwhile).
   3. Then retry `change_task_status`; it now passes. An unapproved move is refused (`forbidden`).
 - **Human-only** (`actor: human_only`) — do not attempt as an agent; comment to ask the human.
+- **Agent-only** (`actor: agent_only`) — the mirror case: a human is refused on that edge, you
+  are not. Cross it as usual.
 
 ## Presence — declare that you are working
 
 While actively working a task, make yourself visible so CodBoard can show you online:
 
-6. `start_session` (executionId + taskId) once when you begin.
-7. `heartbeat_task` (taskId) periodically (~every 30s).
-8. `end_session` (taskId) when you stop.
+7. `start_session` (executionId + taskId) once when you begin.
+8. `heartbeat_task` (taskId) periodically (~every 30s).
+9. `end_session` (taskId) when you stop.
 
 If you stop pinging, the task shows stale, then offline, on its own.
 
 ## Finish a task
 
-9. Open the PR and `set_task_pull_request`.
-10. Move to the in-review / terminal status, respecting transitions
+10. Open the PR and `set_task_pull_request`.
+11. Move to the in-review / terminal status, respecting transitions
     (`in_progress → in_review` needs a `change_request` artifact) **and their execution
-    policy** (proofs / assigned agent / human approval — see **Governed transitions**).
-11. `record_work_note` with kind `finished`.
-12. Attach a **test plan** so a human can replay and validate → see below.
-13. Then refresh the report per cadence → skill **codboard-report**.
+    policy** (proofs / human approval — see **Governed transitions**).
+12. Settle every acceptance criterion of the request — `update_acceptance_criterion` with
+    `verified` only when a proof backs it, `failed` when you proved it does not hold, `waived`
+    with a reason when it was dropped. Never leave one `pending`: that is what
+    `policy.proofs.acceptanceCriteria` checks, and it is the honest record of what the work
+    actually proved.
+13. `record_work_note` with kind `finished`.
+14. Attach a **test plan** so a human can replay and validate → see below.
+15. Then refresh the report per cadence → skill **codboard-report**.
 
 ## Test plan (strongly recommended once work is done)
 
