@@ -9,7 +9,7 @@ description: >-
 
 # CodBoard — watch loop
 
-Loop while you have active tasks; follow `automation.watch.pollHint` (from `get_workflow`)
+Loop while you have active tasks; follow `watch.pollHint` (from `get_project`)
 for cadence. Each poll drains **two inboxes** — comments (free-form) and directives
 (structured) — then applies the **standing policy** (config). CodBoard records intentions and
 your declarations; **it never touches the forge** — you execute (ADR 0007/0010).
@@ -30,7 +30,7 @@ execute, then resolve:
   `set_task_pull_request({ pullRequestUrl, pullRequestStatus: "open" })` + attach a
   `change_request` artifact, then `resolve_task_directive(id)`.
 - **`merge_pr`** (only ever recorded when the PR is open) — verify CI exactly as
-  `automation.autoMergeMode` requires (see below), `gh pr merge`, declare
+  the repository `autoMergeMode` requires (see below), `gh pr merge`, declare
   `set_task_pull_request({ pullRequestStatus: "merged" })`, move the task to the terminal
   status, then `resolve_task_directive(id)`. Attach the same `ci` evidence as an auto-merge.
 - **`approve_transition`** — a governed transition awaiting **human** approval (you proposed
@@ -41,13 +41,14 @@ execute, then resolve:
 Request-level mass actions (`fan_out_request_directives`) simply fan these out to every
 eligible task; drain the resulting per-task directives the same way.
 
-## Standing policy — `automation.autoCreatePr` + `automation.autoMergeMode`
+## Standing policy — the repository `autoCreatePr` + `autoMergeMode`
 
 The config is the **permanent trigger** — the same execution as a directive, driven by policy
-instead of a one-off ask. If `automation.autoCreatePr` is true, open the PR for each ready
+instead of a one-off ask. If the task repository has `autoCreatePr: true`, open the PR for each ready
 task without one (as above) without waiting for a directive.
 
-Then apply `automation.autoMergeMode` to each task whose PR is open.
+Then apply the `autoMergeMode` of the repository each task belongs to (`list_repositories`) —
+not one answer for the whole project — to each task whose PR is open.
 
 CodBoard never reads your CI and never merges — **you** do.
 
@@ -65,7 +66,7 @@ move the task to the workflow's terminal status; CodBoard records the merge.
 
 - **none** — never auto-merge; the owner merges.
 - **ci_green** — check the remote CI in your environment (`gh pr checks <pr>`; if
-  `automation.ciCheckName` is set, look at that check); merge (without asking) as soon as it
+  the repository `ciCheckName` is set, look at that check); merge (without asking) as soon as it
   is green. Evidence: `{ status: "success" }`.
 - **local_ci_green** — the remote CI may be unavailable; run CI locally
   (e.g. `nx affected -t lint test build`); merge (without asking) as soon as it passes.

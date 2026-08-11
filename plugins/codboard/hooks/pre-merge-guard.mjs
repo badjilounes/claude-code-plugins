@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // PreToolUse(Bash) — enforce the project's merge policy. CodBoard's
-// automation.autoMergeMode is the source of truth (cached from get_workflow by
+// autoMergeMode of the repository being merged is the source of truth (cached from
 // post-codboard). This guard only ever acts on a `gh pr merge`; every other
 // Bash command passes through untouched.
-import { readStdin, readConfig, readState, emit } from './lib.mjs';
+import { execFileSync } from 'node:child_process';
+import { readStdin, readConfig, readState, projectDir, emit } from './lib.mjs';
 
 const MERGE_RE = /\bgh\s+pr\s+merge\b/;
 
@@ -27,6 +28,31 @@ function ask(reason) {
   });
 }
 
+function normalizeRepoUrl(url) {
+  return String(url)
+    .trim()
+    .replace(/^git@([^:]+):/, 'https://$1/')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
+// The remote of the directory the merge is being run in, matched against the
+// repositories cached from list_repositories. Unknown remote → unknown policy, which
+// asks rather than assumes.
+function mergeModeForCwd(state, input) {
+  const modes = state.mergeModes || {};
+  try {
+    const remote = execFileSync('git', ['config', '--get', 'remote.origin.url'], {
+      cwd: projectDir(input),
+      encoding: 'utf8',
+    });
+    return modes[normalizeRepoUrl(remote)];
+  } catch {
+    return undefined;
+  }
+}
+
 function main() {
   const input = readStdin();
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo
@@ -35,21 +61,23 @@ function main() {
   if (!MERGE_RE.test(command)) emit(undefined); // not a merge
 
   const state = readState(input);
-  const mode = (state.policy && state.policy.autoMergeMode) ?? state.autoMergeMode;
+  // The policy belongs to the repository being merged (ADR 0069), so match the one
+  // this working directory actually is rather than answering for the whole project.
+  const mode = mergeModeForCwd(state, input);
 
   if (mode === 'none') {
     deny(
-      "CodBoard workflow automation.autoMergeMode is 'none' for this project: " +
-        'the owner merges. Do not merge without explicit owner approval — ask the ' +
-        'owner to perform or request the merge.',
+      "CodBoard autoMergeMode is 'none' for this repository: the owner merges. Do " +
+        'not merge without explicit owner approval — ask the owner to perform or ' +
+        'request the merge.',
     );
   }
 
-  if (!mode || !state.workflowRead) {
+  if (!mode) {
     ask(
-      'CodBoard tracks this repo but the merge policy has not been read this ' +
-        'session. Call `get_workflow` and check `automation.autoMergeMode` (and ' +
-        'satisfy its CI evidence) before merging. Proceed anyway?',
+      'CodBoard tracks this repo but its merge policy has not been read this ' +
+        'session. Call `list_repositories` and check the `automation.autoMergeMode` ' +
+        'of this repository (and satisfy its CI evidence) before merging. Proceed anyway?',
     );
   }
 
