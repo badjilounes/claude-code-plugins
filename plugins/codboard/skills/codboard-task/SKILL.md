@@ -48,11 +48,31 @@ never starts you: you ask, it answers.
 
 ## Start a task
 
-4. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
+4. `start_execution` ({ requestId, changedByType: `llm`, `agentClient`, `agentModel`,
+   `agentMode` }) — this opens **your run** and returns an `executionId`. Keep it for the whole
+   ticket: presence, activity and artifacts all hang off it. See **Declare your run** below for
+   what it buys you.
+5. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
    with `get_transition_policy` if it may need proofs or human approval — see **Governed
    transitions** below.
-5. `set_task_branch` — branch `{type}/{slug}` per the playbook.
-6. `record_work_note` with kind `started` and a one-line summary.
+6. `set_task_branch` — branch `{type}/{slug}` per the playbook.
+7. `record_work_note` with kind `started` and a one-line summary.
+
+## Declare your run
+
+CodBoard already records the **milestones** your task lifecycle declares: `set_task_branch` and
+`set_task_pull_request` become branch / pull-request proofs on their own — you never re-attach
+them by hand. What only you can report is **what happened in between**, so log it as you go on
+the `executionId` from step 4:
+
+- `log_activity({ executionId, taskId, type, summary })` — `analysis_started`,
+  `files_changed`, `command_executed`, `tests_started`, `tests_passed`, `tests_failed`,
+  `review_requested`, `note`, `error`. One line each, at the moment it happens.
+- `attach_commit({ executionId, taskId, sha, url })` for a commit worth citing.
+- `complete_execution({ executionId })` when the work lands, `fail_execution({ executionId,
+  summary })` when you give up — a run left open reads as still running forever.
+
+Say only what you did. An event you did not observe is not evidence.
 
 ## Governed transitions
 
@@ -76,26 +96,28 @@ The server refuses a move whose policy is not met, so satisfy what it lists firs
 
 While actively working a task, make yourself visible so CodBoard can show you online:
 
-7. `start_session` (executionId + taskId) once when you begin.
-8. `heartbeat_task` (taskId) periodically (~every 30s).
-9. `end_session` (taskId) when you stop.
+8. `start_session` (the `executionId` from step 4 + taskId) once when you begin.
+9. `heartbeat_task` (taskId) periodically (~every 30s).
+10. `end_session` (taskId) when you stop.
 
 If you stop pinging, the task shows stale, then offline, on its own.
 
 ## Finish a task
 
-10. Open the PR and `set_task_pull_request`.
-11. Move to the in-review / terminal status, respecting transitions
+11. Open the PR and `set_task_pull_request` — that alone puts the pull request on the run's
+    timeline; there is nothing else to attach.
+12. Move to the in-review / terminal status, respecting transitions
     (`in_progress → in_review` needs a `change_request` artifact) **and their execution
     policy** (proofs / human approval — see **Governed transitions**).
-12. Settle every acceptance criterion of the request — `update_acceptance_criterion` with
+13. Settle every acceptance criterion of the request — `update_acceptance_criterion` with
     `verified` only when a proof backs it, `failed` when you proved it does not hold, `waived`
     with a reason when it was dropped. Never leave one `pending`: that is what
     `policy.proofs.acceptanceCriteria` checks, and it is the honest record of what the work
     actually proved.
-13. `record_work_note` with kind `finished`.
-14. Attach a **test plan** so a human can replay and validate → see below.
-15. Then refresh the report per cadence → skill **codboard-report**.
+14. `record_work_note` with kind `finished`.
+15. Attach a **test plan** so a human can replay and validate → see below.
+16. `complete_execution` (or `fail_execution`) to close your run.
+17. Then refresh the report per cadence → skill **codboard-report**.
 
 ## Test plan (strongly recommended once work is done)
 

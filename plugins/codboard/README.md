@@ -212,7 +212,7 @@ Le handoff prompt (auparavant un pavé collé depuis la web app) est découpé p
 | Skill | Rôle |
 | --- | --- |
 | `codboard-workflow` | Au début de session : lit `.codboard/config.json` (le pointeur écrit par `/codboard:init`) puis `get_workflow`, lit statuses/transitions/playbook/automation/reportPrompt, orchestre les autres skills. |
-| `codboard-task` | Ticket → `create_request` → `create_task`, start/finish, status/branch/PR, présence (`start_session`/`heartbeat_task`/`end_session`), plan de test (`add_test_step`/`update_test_step`/`remove_test_step`/`list_test_steps`) + hébergement des médias sur R2 (`create_media_upload` → URL présignée, l'agent PUT les octets). |
+| `codboard-task` | Ticket → `create_request` → `create_task`, start/finish, status/branch/PR, **run déclaré** (`start_execution` → `executionId`, `log_activity` pour ce que la branche et la PR ne disent pas, `complete_execution`/`fail_execution`), présence (`start_session`/`heartbeat_task`/`end_session`), plan de test (`add_test_step`/`update_test_step`/`remove_test_step`/`list_test_steps`) + hébergement des médias sur R2 (`create_media_upload` → URL présignée, l'agent PUT les octets). |
 | `codboard-watch` | Boucle à **deux inbox** : `list_comments` (commentaires) + `list_pending_directives` (directives `create_pr`/`merge_pr` → ouvrir/merger la PR puis `resolve_task_directive`) ; puis politique permanente `automation.autoCreatePr` + les 4 modes `automation.autoMergeMode` — un mode non-`none` dont la contrainte est satisfaite déclenche le merge **sans redemander** à l'utilisateur. |
 | `codboard-report` | `list_work_notes` → `upsert_report` selon `reportPrompt` et `reportingCadence`. |
 

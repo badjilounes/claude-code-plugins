@@ -10,7 +10,7 @@ const PR_OPEN_RE = /\bgh\s+pr\s+create\b/;
 // Milestone -> the CodBoard tool that mirrors it (used in the nudge text).
 const NUDGE = {
   branch: 'the branch is not yet on CodBoard — call `set_task_branch` and move the task to in_progress',
-  pr: 'the PR is not yet on CodBoard — call `set_task_pull_request` (+ `attach_change_request`)',
+  pr: 'the PR is not yet on CodBoard — call `set_task_pull_request` (it lands on the execution timeline on its own)',
 };
 
 function detect(command) {
