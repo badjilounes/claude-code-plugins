@@ -46,7 +46,7 @@ claude-code-plugins/               (repo = marketplace)
     │   ├── codboard-workflow/        # entrée : lit .codboard/config.json, charge get_workflow
     │   ├── codboard-task/            # cycle de vie d'une tâche (request → tasks, présence)
     │   ├── codboard-watch/           # boucle de veille : commentaires + auto-merge
-    │   └── codboard-report/          # reporting selon reportPrompt + cadence
+    │   └── codboard-report/          # reporting selon le reportPrompt du projet + cadence
     └── README.md
 ```
 
@@ -175,19 +175,19 @@ committé) alimenté par ce qu'ils observent des appels d'outils.
 | `pre-merge-guard` | `PreToolUse(Bash)` | Intercepte `gh pr merge` : **deny** si `autoMergeMode: none`, **ask** si la politique n'a pas encore été lue, **laisse passer sans confirmation** les modes permissifs (le mode configuré vaut autorisation). |
 | `stop-check` | `Stop` | **Bloque la fin du tour** tant qu'une obligation des 4 sections n'est pas remplie (branche/PR non mirroré, plan de test/capture manquant si requis, report périmé vs cadence). Garde anti-boucle via `stop_hook_active`. |
 
-Les 4 sections de config sont **lues via `get_workflow`** (jamais figées) et mappées à
-l'enforcement :
+La config est **lue à l'exécution** (jamais figée) depuis **trois** sources — un workflow est
+une machine à états et rien d'autre (ADR 0069) — et mappée à l'enforcement :
 
 | Section | Champs | Ce que les hooks en font |
 | --- | --- | --- |
 | **Workflow** | `statuses`, `transitions` (+ `policy`), `playbook` | Gate branche/PR au `Stop`. Un projet peut porter **plusieurs workflows nommés** (`list_workflows`, `get_workflow({ taskId })`). Chaque transition est validée **côté serveur** au `change_task_status` : gardes d'evidence (artefact `change_request`, `reason`, preuves `branch`/`pullRequest`/`tests`/`acceptanceCriteria` sous `strict`) **et** policy d'exécution — `human_only`/`agent_only`/rôles et approbation humaine (`human_approval` via directive `approve_transition`) refusent le franchissement (403). Avant de tenter un passage, `get_transition_policy({ id, toStatus })` répond sans rien modifier ce qui manque encore (`missing`) et si le passage serait refusé (`wouldBlock`). |
-| **Automation** | `autoMergeMode`, `watch`, `reportingCadence`, `autoRun` | `autoMergeMode` → garde de merge. Un mode non-`none` **vaut mandat** : contrainte satisfaite ⇒ merge **sans redemander** (seul `none` = merge par l'owner). `reportingCadence` → alimente le gate Report. `autoRun` (`mode` off/on_demand/eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) dit si le projet **distribue du travail** : `claim_next_task` répond `claimed` avec un bail, ou `auto_run_off` / `max_concurrent_reached` / `nothing_claimable`. CodBoard ne démarre jamais un agent — l'agent demande. |
-| **Testing** | `testing.testPlans`, `testing.capture.{screenshots,video}` | Une tâche finie sans plan de test (`always`) ou sans capture (`required`) bloque le `Stop`. |
-| **Report** | `reportPrompt`, `reportingCadence` | Après une fin de tâche (ou chaque note, selon la cadence), un report périmé bloque le `Stop` — sauf cadence `manual`. |
+| **Dépôt** (`list_repositories`) | `automation.{autoMergeMode, autoCreatePr, ciCheckName}` | `autoMergeMode` → garde de merge, **par dépôt** : le hook compare le remote du répertoire courant aux dépôts du projet, donc l'API et le site de docs peuvent répondre différemment. Un mode non-`none` **vaut mandat** : contrainte satisfaite ⇒ merge **sans redemander** (seul `none` = merge par l'owner). `reportingCadence` → alimente le gate Report. `autoRun` (`mode` off/on_demand/eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) dit si le projet **distribue du travail** : `claim_next_task` répond `claimed` avec un bail, ou `auto_run_off` / `max_concurrent_reached` / `nothing_claimable`. CodBoard ne démarre jamais un agent — l'agent demande. |
+| **Projet** (`get_project`) | `reportPrompt`, `reportingCadence`, `autoRun`, `watch` | Après une fin de tâche (ou chaque note, selon la cadence), un report périmé bloque le `Stop` — sauf cadence `manual`. `autoRun` (`mode` off/on_demand/eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) dit si le projet **distribue du travail** : `claim_next_task` répond `claimed` avec un bail, ou `auto_run_off` / `max_concurrent_reached` / `nothing_claimable`. CodBoard ne démarre jamais un agent — l'agent demande. |
+| **Plan de test & capture** | `policy.proofs.{testPlan, capture}` sur une transition | Plus de gate local : quand la transition l'exige, c'est le **serveur** qui refuse le passage. `get_transition_policy` dit ce qui manque avant d'essayer. |
 
 Tous les hooks **no-op** hors d'un repo tracké (pas de `.codboard/config.json`) et
 n'échouent jamais une session (toute erreur interne → sortie 0 silencieuse). Les gates
-Testing/Report ne s'activent qu'une fois `get_workflow` lu (politique inconnue ⇒ pas de
+Report ne s'active qu'une fois `get_project` lu (politique inconnue ⇒ pas de
 blocage surprise) ; les gates branche/PR et la garde de merge sont toujours actifs.
 
 ### 3. Filet côté serveur
@@ -213,7 +213,7 @@ Le handoff prompt (auparavant un pavé collé depuis la web app) est découpé p
 | --- | --- |
 | `codboard-workflow` | Au début de session : lit `.codboard/config.json` (le pointeur écrit par `/codboard:init`) puis `get_workflow`, lit statuses/transitions/playbook/automation/reportPrompt, orchestre les autres skills. |
 | `codboard-task` | Ticket → `create_request` → `create_task`, start/finish, status/branch/PR, **run déclaré** (`start_execution` → `executionId`, `log_activity` pour ce que la branche et la PR ne disent pas, `complete_execution`/`fail_execution`), présence (`start_session`/`heartbeat_task`/`end_session`), plan de test (`add_test_step`/`update_test_step`/`remove_test_step`/`list_test_steps`) + hébergement des médias sur R2 (`create_media_upload` → URL présignée, l'agent PUT les octets). |
-| `codboard-watch` | Boucle à **deux inbox** : `list_comments` (commentaires) + `list_pending_directives` (directives `create_pr`/`merge_pr` → ouvrir/merger la PR puis `resolve_task_directive`) ; puis politique permanente `automation.autoCreatePr` + les 4 modes `automation.autoMergeMode` — un mode non-`none` dont la contrainte est satisfaite déclenche le merge **sans redemander** à l'utilisateur. |
+| `codboard-watch` | Boucle à **deux inbox** : `list_comments` (commentaires) + `list_pending_directives` (directives `create_pr`/`merge_pr` → ouvrir/merger la PR puis `resolve_task_directive`) ; puis politique permanente `autoCreatePr` + les 4 modes `autoMergeMode` du dépôt de la tâche — un mode non-`none` dont la contrainte est satisfaite déclenche le merge **sans redemander** à l'utilisateur. |
 | `codboard-report` | `list_work_notes` → `upsert_report` selon `reportPrompt` et `reportingCadence`. |
 
 **Aucune valeur runtime n'est figée dans les skills.** `autoMergeMode`, `reportPrompt`,

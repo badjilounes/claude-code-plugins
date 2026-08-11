@@ -4,7 +4,7 @@ description: >-
   Write and keep fresh the CodBoard daily report for a project, following the project's
   reportPrompt and reporting cadence. Use when asked to write or refresh the daily report,
   or after finishing a task when the cadence requires it. Uses reportPrompt and
-  automation.reportingCadence loaded by the codboard-workflow skill.
+  reportingCadence loaded from the project by the codboard-workflow skill.
 ---
 
 # CodBoard — reporting
@@ -13,12 +13,12 @@ There is no scheduled cutoff — **you** produce the report; CodBoard never gene
 
 ## WHAT to write
 
-Follow the project's `reportPrompt` (from `get_workflow`) to the letter — it is THE
+Follow the project's `reportPrompt` (from `get_project`) to the letter — it is THE
 reporting guidance for this project (structure, tone, and the ticket / PR links it asks
 for). It is user-configurable, so re-read it each session rather than assuming a fixed
 format.
 
-## WHEN to (re)generate — per `automation.reportingCadence`
+## WHEN to (re)generate — per the project `reportingCadence`
 
 Call `list_work_notes` for the current reporting day, then `upsert_report` to (re)write the
 dated daily report for the project.

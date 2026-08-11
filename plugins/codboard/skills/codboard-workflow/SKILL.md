@@ -4,8 +4,8 @@ description: >-
   Load and drive the CodBoard LLM task-tracking workflow for this repository — become its
   watcher. Use at the start of any session that works CodBoard tickets, or when asked to
   watch the board, act as the board watcher, connect this repo to CodBoard, or process a
-  ticket. Loads the per-project workflow (statuses, transitions, playbook, automation,
-  reporting guidance, and the per-transition execution policy) via get_workflow / list_workflows
+  ticket. Loads the state machine via list_workflows / get_workflow, and the project and
+  repository policies that go with it (report, work queue, watch, merge)
   and orchestrates the codboard-task, codboard-watch and codboard-report skills.
 ---
 
@@ -22,19 +22,22 @@ You drive this repository's work through **CodBoard**, our LLM task-tracking lay
    `repositoryId` directly — that committed pointer is the binding, don't re-guess. Only
    if it is missing, `list_projects` and pick the project this repository belongs to (and
    suggest running `/codboard:init` to make the binding permanent). Remember its `projectId`.
-2. `get_workflow` for that project. A project can hold **several named workflows** (e.g. a
-   default, a `support` one). `get_workflow({ projectId })` returns the project default;
-   pass `workflowId`, or `requestType` / `taskId`, to read the one governing a specific
-   ticket, and check `resolvedBy` to know which it picked. `list_workflows({ projectId })`
-   enumerates them all (id, name, slug, isDefault, bound request types, counts). Read the
-   whole definition and keep it for the session:
-   - **statuses / transitions** — the state machine you must stay within. Each transition may
-     carry an **execution policy** the server ENFORCES (see below) — read it before a move.
-   - **playbook** — how to decompose a request and drive work (events `request.created`,
-     `task.started`, `task.finished`).
-   - **automation** — `{ autoCreatePr, autoMergeMode, ciCheckName, watch { comments, pollHint }, reportingCadence }`
-     — the policy you apply. Never hardcode it; it is per-project and can change.
-   - **reportPrompt** — the user-configured reporting guidance you MUST follow.
+2. Read the configuration from **three** places. A workflow is a state machine and nothing
+   else — the rest of the policy lives where it is true:
+   - **`list_workflows({ projectId })` then `get_workflow({ workflowId })`** — a project holds
+     several named workflows and **no default**. Pass `requestType` / `taskId` to read the one
+     governing a specific ticket, and check `resolvedBy` to know which it picked; with no
+     discriminant the call may legitimately return **nothing**, and a ticket no rule elects is
+     simply ungoverned. You get **statuses / transitions** (the state machine you must stay
+     within; each transition may carry an **execution policy** the server ENFORCES — read it
+     before a move) and the **playbook** (how to decompose and drive work).
+   - **`get_project({ id })`** — `reportPrompt` (the reporting guidance you MUST follow, always
+     returned in its effective form), `reportingCadence`, `autoRun` (the work queue) and
+     `watch` { comments, pollHint }. These are the project's, whatever workflow governs a ticket.
+   - **`list_repositories({ projectId })`** — per repository, `automation` { `autoMergeMode`,
+     `autoCreatePr`, `ciCheckName` }. Apply the policy of **the repository the task belongs
+     to**: two repositories of one project may answer differently, and `ciCheckName` names a
+     check of one of them.
 
 These runtime values parameterize everything below. Re-read them each session rather than
 assuming a fixed shape. When you work a specific task, resolve its workflow with
@@ -92,7 +95,8 @@ yet):
 
 ## Auto-run — does this project hand out work?
 
-`automation.autoRun` says whether an agent may claim work from the project's queue, and how:
+`autoRun` on the **project** (`get_project`) says whether an agent may claim work from its
+queue, and how:
 
 - **`mode`** — `off` (default: nothing is claimable) | `on_demand` (only tasks a human queued)
   | `eligible` (any task sitting in one of `statuses`).

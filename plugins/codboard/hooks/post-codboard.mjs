@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // PostToolUse(mcp__*codboard*) — the ledger's write side. Two jobs:
-//   1. Cache the whole per-project policy from get_workflow (the four config
+//   1. Cache the policy from its three sources — get_workflow, get_project and
+//      list_repositories (ADR 0069) — for the gates below (was: the four config
 //      areas: Workflow statuses, Automation, Testing, Report cadence) so the
 //      Stop and merge hooks can enforce it without ever calling the API.
 //   2. Record which milestones/obligations have been satisfied as the matching
@@ -14,7 +15,7 @@ function toolSuffix(toolName) {
   return parts[parts.length - 1] || '';
 }
 
-// Pull the workflow object out of the get_workflow response, whatever shape the
+// Pull the payload out of an MCP response, whatever shape the
 // harness wraps MCP output in (string, {content:[{text}]}, or the object itself).
 function extractWorkflow(input) {
   const resp = input.tool_response ?? input.tool_output;
@@ -40,25 +41,54 @@ function extractWorkflow(input) {
       // not JSON — skip
     }
   }
-  return candidates.find((c) => c && (c.statuses || c.automation || c.testing));
+  return candidates.find((c) => c && (c.statuses || c.reportPrompt || Array.isArray(c)));
 }
 
-function cachePolicy(state, wf) {
-  const a = (wf && wf.automation) || {};
-  const t = (wf && wf.testing) || {};
-  const cap = t.capture || {};
-  const terminal = Array.isArray(wf.statuses)
+// The configuration now comes from three tools (ADR 0069): the workflow says where a
+// ticket may go, the project says how the report is written and when, and each
+// repository says how its own pull requests may land.
+function cacheWorkflow(state, wf) {
+  const terminal = Array.isArray(wf && wf.statuses)
     ? wf.statuses.filter((s) => s && (s.terminal === true || s.category === 'done')).map((s) => s.key).filter(Boolean)
     : [];
   state.policy = {
-    autoMergeMode: a.autoMergeMode, // none | ci_green | local_ci_green | without_ci
-    reportingCadence: a.reportingCadence || 'on_task_finished',
-    testPlans: t.testPlans || 'never', // never | when_possible | always
-    captureScreens: cap.screenshots || 'off', // off | when_possible | required
-    captureVideo: cap.video || 'off',
+    ...(state.policy || {}),
     terminalStatuses: terminal.length ? terminal : ['done'],
   };
   state.workflowRead = true;
+}
+
+function cacheProject(state, project) {
+  if (!project || typeof project !== 'object') return;
+  state.policy = {
+    ...(state.policy || {}),
+    reportingCadence: project.reportingCadence || 'on_task_finished',
+  };
+  state.projectRead = true;
+}
+
+// Keyed by repository URL: the merge guard runs in one working directory, and that
+// directory is one repository. A project-wide answer would either forbid a merge the
+// docs repo allows, or allow one the API repo forbids.
+function cacheRepositories(state, repositories) {
+  if (!Array.isArray(repositories)) return;
+  const byUrl = {};
+  for (const repo of repositories) {
+    if (repo && typeof repo.url === 'string' && repo.automation) {
+      byUrl[normalizeRepoUrl(repo.url)] = repo.automation.autoMergeMode || 'none';
+    }
+  }
+  state.mergeModes = byUrl;
+  state.repositoriesRead = true;
+}
+
+export function normalizeRepoUrl(url) {
+  return String(url)
+    .trim()
+    .replace(/^git@([^:]+):/, 'https://$1/')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
 }
 
 function main() {
@@ -72,8 +102,20 @@ function main() {
 
   if (suffix === 'get_workflow') {
     const wf = extractWorkflow(input);
-    if (wf) cachePolicy(state, wf);
-    else state.workflowRead = true; // it was read even if we could not parse the policy
+    if (wf) cacheWorkflow(state, wf);
+    else state.workflowRead = true; // it was read even if we could not parse the definition
+    writeState(input, state);
+    emit(undefined);
+  }
+
+  if (suffix === 'get_project') {
+    cacheProject(state, extractWorkflow(input));
+    writeState(input, state);
+    emit(undefined);
+  }
+
+  if (suffix === 'list_repositories') {
+    cacheRepositories(state, extractWorkflow(input));
     writeState(input, state);
     emit(undefined);
   }
@@ -87,8 +129,6 @@ function main() {
   // milestone / obligation satisfied
   if (suffix === 'set_task_branch') state.pending.branch = { ...(state.pending.branch || { seen: true }), synced: true };
   else if (suffix === 'set_task_pull_request') state.pending.pr = { ...(state.pending.pr || { seen: true }), synced: true };
-  else if (suffix === 'add_test_step') state.done.testPlan = true;
-  else if (suffix === 'create_media_upload') state.done.capture = true;
   else if (suffix === 'upsert_report') state.reportStale = false;
   else if (suffix === 'complete_execution') staleOnFinish();
   else if (suffix === 'record_work_note') {

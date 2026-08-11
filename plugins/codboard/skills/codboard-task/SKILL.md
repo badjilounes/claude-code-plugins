@@ -33,7 +33,7 @@ Two agents never receive the same task: the claim is atomic. If you give up befo
 `queue_task({ id, queued: false })` returns it to the queue immediately instead of waiting for
 the lease to expire. `queue_task({ id, queued: true })` sends a task to the queue.
 
-The policy lives in `automation.autoRun` of the governing workflow (`mode` off | on_demand |
+The policy lives in `autoRun` on the project (`get_project`) (`mode` off | on_demand |
 eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) — read it, never assume it. CodBoard
 never starts you: you ask, it answers.
 

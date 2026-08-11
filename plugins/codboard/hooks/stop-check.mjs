@@ -2,12 +2,12 @@
 // Stop — the sync checkpoint. Blocks the turn from ending while an obligation
 // from any of the four CodBoard config areas is unmet:
 //   Workflow  — a created branch / opened PR was never mirrored.
-//   Testing   — a task was finished but the project's test-plan / capture policy
-//               (testing.testPlans: always, testing.capture: required) is unmet.
 //   Report    — a task was finished (or a note logged) but the daily report was
-//               not refreshed per automation.reportingCadence.
-// The testing/report gates require the workflow to have been read this session
-// (so an unknown policy never produces a surprise block); the branch/PR gates
+//               not refreshed per the project reportingCadence.
+// Test plan and capture are NOT gated here since ADR 0069: when a transition requires
+// them the server refuses the move, and a local gate that duplicates a server rule can
+// only disagree with it. The report gate requires the project to have been read this
+// session (so an unknown cadence never produces a surprise block); the branch/PR gates
 // are always on. Loop-guarded via stop_hook_active.
 import { readStdin, readConfig, readState, emit } from './lib.mjs';
 
@@ -15,7 +15,7 @@ function collect(state) {
   const issues = [];
   const pending = state.pending || {};
   const p = state.policy || {};
-  const done = state.done || {};
+
 
   if (pending.branch && pending.branch.seen && !pending.branch.synced) {
     const d = pending.branch.detail ? ` (${pending.branch.detail})` : '';
@@ -25,16 +25,7 @@ function collect(state) {
     issues.push('Workflow: a PR was opened but never mirrored — call `set_task_pull_request`.');
   }
 
-  if (state.workflowRead && state.finished) {
-    if (p.testPlans === 'always' && !done.testPlan) {
-      issues.push('Testing: `testing.testPlans: always` — attach a test plan before finishing (`add_test_step`).');
-    }
-    if ((p.captureScreens === 'required' || p.captureVideo === 'required') && !done.capture) {
-      issues.push('Testing: `testing.capture: required` — attach a screenshot/video capture before finishing (`create_media_upload`).');
-    }
-  }
-
-  if (state.workflowRead && state.reportStale && (p.reportingCadence || 'on_task_finished') !== 'manual') {
+  if (state.projectRead && state.reportStale && (p.reportingCadence || 'on_task_finished') !== 'manual') {
     issues.push(
       `Report: \`reportingCadence: ${p.reportingCadence || 'on_task_finished'}\` — refresh the dated daily report ` +
         '(`list_work_notes` then `upsert_report`).',
