@@ -42,7 +42,7 @@ Keep `projectId`, project name, and `workspaceId`.
 - `get_workflow` for the project and keep its `workflowId`. (Do not copy any workflow
   values into the repo — the hooks re-read them via `get_workflow`.)
 
-## 4. Write `.codboard/config.json` (+ gitignore the ledger)
+## 4. Write `.codboard/config.json` (+ gitignore the ledger, + enable the plugin)
 
 Create the `.codboard/` folder and write `.codboard/config.json` (committed — no secrets,
 auth is OAuth per user):
@@ -61,23 +61,46 @@ auth is OAuth per user):
 
 Ensure `.gitignore` contains `.codboard/session-state.json` (the hooks' local ledger — the
 only part of `.codboard/` that must NOT be committed). Append the line if absent; create
-`.gitignore` if missing. This is the only other write.
+`.gitignore` if missing.
 
-Nothing else is written: no `CLAUDE.md` edit (the SessionStart hook injects the pointer
-from `config.json` every session, so it is redundant), no PR template, no `AGENTS.md` /
-`copilot-instructions.md` (a PR template is the client's own choice; non-Claude agents are
-covered by their own per-provider CodBoard plugin).
+Then **enable the plugin in the committed `.claude/settings.json`** — this is what makes
+the binding survive. A `claude plugin install` writes to `~/.claude/`, which is **wiped
+between hosted sessions** (Claude Code web runs each session in a fresh container): the
+plugin silently is not there, no hook runs, and nothing reports the absence. A repo can
+therefore carry `.codboard/config.json` and still be completely unguarded. Only this
+committed file survives.
+
+**Merge — never overwrite.** Read the existing file if there is one and preserve every
+other key: a repo typically already declares other plugins and its own `hooks`. Add:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "badjilounes": { "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" } }
+  },
+  "enabledPlugins": { "codboard@badjilounes": true }
+}
+```
+
+Both keys are required: without `extraKnownMarketplaces`, `codboard@badjilounes` does not
+resolve and the entry in `enabledPlugins` does nothing.
+
+Those three writes are the whole of it. Nothing else: no `CLAUDE.md` edit (the SessionStart
+hook injects the pointer from `config.json` every session, so it is redundant), no PR
+template, no `AGENTS.md` / `copilot-instructions.md` (a PR template is the client's own
+choice; non-Claude agents are covered by their own per-provider CodBoard plugin).
 
 ## 5. Summarise
 
-Report the resolved project / repo / workflow ids and that `.codboard/config.json` (+ the
-`.gitignore` line) was written. Then state the manual next steps — **which this command
-does not perform**:
+Report the resolved project / repo / workflow ids and the three files touched
+(`.codboard/config.json`, the `.gitignore` line, `.claude/settings.json`). Then state the
+manual next steps — **which this command does not perform**:
 
+- **review and commit the three files** — until `.claude/settings.json` is committed and
+  pushed, hosted sessions still start without the plugin and without any gate;
 - authorise the OAuth connector once in the browser (Claude Code web also needs network
-  access to `mcp.codboard.com` allowed);
-- review and commit `.codboard/config.json` yourself;
-- optional, to enable the plugin for the whole team on clone, add to a committed
-  `.claude/settings.json`: `extraKnownMarketplaces.badjilounes` →
-  `{ "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" } }` and
-  `enabledPlugins["codboard@badjilounes"] = true`.
+  access to `mcp.codboard.com` allowed).
+
+Say plainly that `.claude/settings.json` changes the setup of everyone who clones the repo
+— it is the intended effect (that is what "tracked on CodBoard" means for a team), but the
+user should know it before committing.
