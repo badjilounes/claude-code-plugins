@@ -1,56 +1,46 @@
 #!/usr/bin/env node
 // PostToolUse(mcp__*codboard*) — the ledger's write side. Two jobs:
 //   1. Cache the policy from its three sources — get_workflow, get_project and
-//      list_repositories (ADR 0069) — for the gates below (was: the four config
-//      areas: Workflow statuses, Automation, Testing, Report cadence) so the
-//      Stop and merge hooks can enforce it without ever calling the API.
+//      list_repositories (ADR 0069) — so the Stop and merge hooks can enforce
+//      it without ever calling the API.
 //   2. Record which milestones/obligations have been satisfied as the matching
-//      codboard tools fire (branch, PR, test plan, capture, report, finish).
+//      codboard tools fire (run opened, branch, PR, report, finish).
 // Matched broadly on the tool-name suffix so it is robust to the MCP namespace
 // prefix (mcp__codboard__, mcp__plugin_codboard_codboard__, ...).
-import { readStdin, readConfig, readState, writeState, emit } from './lib.mjs';
+import {
+  readStdin,
+  readConfig,
+  readState,
+  writeState,
+  markSynced,
+  extractPayloads,
+  pick,
+  normalizeRepoUrl,
+  emit,
+} from './lib.mjs';
 
 function toolSuffix(toolName) {
   const parts = String(toolName || '').split('__');
   return parts[parts.length - 1] || '';
 }
 
-// Pull the payload out of an MCP response, whatever shape the
-// harness wraps MCP output in (string, {content:[{text}]}, or the object itself).
-function extractWorkflow(input) {
-  const resp = input.tool_response ?? input.tool_output;
-  const texts = [];
-  const collect = (v) => {
-    if (v == null) return;
-    if (typeof v === 'string') texts.push(v);
-    else if (Array.isArray(v)) v.forEach(collect);
-    else if (typeof v === 'object') {
-      if (typeof v.text === 'string') texts.push(v.text);
-      if (Array.isArray(v.content)) collect(v.content);
-    }
-  };
-  collect(resp);
-  const candidates = [];
-  if (resp && typeof resp === 'object' && (resp.statuses || resp.automation || resp.testing)) {
-    candidates.push(resp);
-  }
-  for (const t of texts) {
-    try {
-      candidates.push(JSON.parse(t));
-    } catch {
-      // not JSON — skip
-    }
-  }
-  return candidates.find((c) => c && (c.statuses || c.reportPrompt || Array.isArray(c)));
-}
+// Each reader brings its own shape test. One shared heuristic across three
+// different payloads eventually matches the wrong one — and does it silently,
+// which is how a gate ends up permanently disarmed with nothing in the logs.
+const IS_WORKFLOW = (c) => Boolean(c.statuses || c.transitions || c.playbook);
+const IS_PROJECT = (c) => Boolean(c.reportingCadence || c.reportPrompt || c.autoRun || c.watch);
+const IS_REPOSITORIES = (c) =>
+  Array.isArray(c) && c.some((r) => r && typeof r === 'object' && typeof r.url === 'string');
 
-// The configuration now comes from three tools (ADR 0069): the workflow says where a
-// ticket may go, the project says how the report is written and when, and each
-// repository says how its own pull requests may land.
+// The configuration comes from three tools (ADR 0069): the workflow says where
+// a ticket may go, the project says how the report is written and when, and
+// each repository says how its own pull requests may land.
 function cacheWorkflow(state, wf) {
-  const terminal = Array.isArray(wf && wf.statuses)
-    ? wf.statuses.filter((s) => s && (s.terminal === true || s.category === 'done')).map((s) => s.key).filter(Boolean)
-    : [];
+  const statuses = Array.isArray(wf && wf.statuses) ? wf.statuses : [];
+  const terminal = statuses
+    .filter((s) => s && (s.terminal === true || s.category === 'done'))
+    .map((s) => s.key)
+    .filter(Boolean);
   state.policy = {
     ...(state.policy || {}),
     terminalStatuses: terminal.length ? terminal : ['done'],
@@ -59,21 +49,22 @@ function cacheWorkflow(state, wf) {
 }
 
 function cacheProject(state, project) {
-  if (!project || typeof project !== 'object') return;
   state.policy = {
     ...(state.policy || {}),
-    reportingCadence: project.reportingCadence || 'on_task_finished',
+    reportingCadence: (project && project.reportingCadence) || 'on_task_finished',
   };
+  // Set even when the payload could not be parsed: the project WAS read, and
+  // the cadence falls back to the strict default. Leaving it unset would turn
+  // an unrecognised response shape into a silently disabled report gate.
   state.projectRead = true;
 }
 
-// Keyed by repository URL: the merge guard runs in one working directory, and that
-// directory is one repository. A project-wide answer would either forbid a merge the
-// docs repo allows, or allow one the API repo forbids.
+// Keyed by repository URL: the merge guard answers for one repository at a
+// time. A project-wide answer would either forbid a merge the docs repo allows,
+// or allow one the API repo forbids.
 function cacheRepositories(state, repositories) {
-  if (!Array.isArray(repositories)) return;
   const byUrl = {};
-  for (const repo of repositories) {
+  for (const repo of repositories || []) {
     if (repo && typeof repo.url === 'string' && repo.automation) {
       byUrl[normalizeRepoUrl(repo.url)] = repo.automation.autoMergeMode || 'none';
     }
@@ -82,53 +73,31 @@ function cacheRepositories(state, repositories) {
   state.repositoriesRead = true;
 }
 
-export function normalizeRepoUrl(url) {
-  return String(url)
-    .trim()
-    .replace(/^git@([^:]+):/, 'https://$1/')
-    .replace(/\.git$/, '')
-    .replace(/\/+$/, '')
-    .toLowerCase();
-}
+const READERS = {
+  get_workflow: (state, payloads) => cacheWorkflow(state, pick(payloads, IS_WORKFLOW)),
+  get_project: (state, payloads) => cacheProject(state, pick(payloads, IS_PROJECT)),
+  list_repositories: (state, payloads) => cacheRepositories(state, pick(payloads, IS_REPOSITORIES)),
+};
 
-function main() {
-  const input = readStdin();
-  if (!readConfig(input)) emit(undefined); // not a CodBoard repo
+// Tools that can only be called with an executionId (or that return one) prove
+// a run exists for this session's work — which is what the Stop existence gate
+// is asking for.
+const OPENS_RUN = new Set(['start_execution', 'log_activity', 'attach_commit', 'complete_execution']);
 
-  const suffix = toolSuffix(input.tool_name);
-  const state = readState(input);
-  state.pending = state.pending || {};
-  state.done = state.done || {};
-
-  if (suffix === 'get_workflow') {
-    const wf = extractWorkflow(input);
-    if (wf) cacheWorkflow(state, wf);
-    else state.workflowRead = true; // it was read even if we could not parse the definition
-    writeState(input, state);
-    emit(undefined);
-  }
-
-  if (suffix === 'get_project') {
-    cacheProject(state, extractWorkflow(input));
-    writeState(input, state);
-    emit(undefined);
-  }
-
-  if (suffix === 'list_repositories') {
-    cacheRepositories(state, extractWorkflow(input));
-    writeState(input, state);
-    emit(undefined);
-  }
-
+function applyMilestone(state, input, suffix) {
   const cadence = (state.policy && state.policy.reportingCadence) || 'on_task_finished';
   const staleOnFinish = () => {
     state.finished = true;
     if (cadence !== 'manual') state.reportStale = true;
   };
 
-  // milestone / obligation satisfied
-  if (suffix === 'set_task_branch') state.pending.branch = { ...(state.pending.branch || { seen: true }), synced: true };
-  else if (suffix === 'set_task_pull_request') state.pending.pr = { ...(state.pending.pr || { seen: true }), synced: true };
+  if (OPENS_RUN.has(suffix)) {
+    state.executionOpen = true;
+    markSynced(state, 'work');
+  }
+
+  if (suffix === 'set_task_branch') markSynced(state, 'branch');
+  else if (suffix === 'set_task_pull_request') markSynced(state, 'pr');
   else if (suffix === 'upsert_report') state.reportStale = false;
   else if (suffix === 'complete_execution') staleOnFinish();
   else if (suffix === 'record_work_note') {
@@ -139,7 +108,24 @@ function main() {
     const terminal = (state.policy && state.policy.terminalStatuses) || ['done'];
     if (toStatus && terminal.includes(toStatus)) staleOnFinish();
   }
+}
 
+function main() {
+  const input = readStdin();
+  if (!readConfig(input)) emit(undefined); // not a CodBoard repo
+
+  const suffix = toolSuffix(input.tool_name);
+  const state = readState(input);
+  state.pending = state.pending || {};
+
+  const reader = READERS[suffix];
+  if (reader) {
+    reader(state, extractPayloads(input));
+    writeState(input, state);
+    emit(undefined);
+  }
+
+  applyMilestone(state, input, suffix);
   writeState(input, state);
 
   // D1 (ADR 0044): a status change makes CodBoard's read-only remote mirrors

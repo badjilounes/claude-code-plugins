@@ -1,24 +1,59 @@
 #!/usr/bin/env node
-// PostToolUse(Bash) — record dev milestones (branch created, PR opened) in the
-// ledger so the Stop hook can check they were mirrored to CodBoard, and nudge
-// Claude to sync each milestone once, the moment it happens.
-import { readStdin, readConfig, readState, writeState, emit } from './lib.mjs';
+// PostToolUse(Bash) — record dev milestones (branch created or pushed, PR
+// opened, code committed) in the ledger so the Stop hook can check they were
+// mirrored to CodBoard, and nudge Claude to sync each milestone once, the
+// moment it happens.
+//
+// Detection is deliberately wider than "the command that creates a branch".
+// A branch reaches a forge by being pushed at least as often as by being
+// created, and in a Claude Code web session the branch usually exists before
+// the first turn — so `git push` on a non-default branch is itself a
+// milestone, resolved from git rather than parsed out of the command.
+import {
+  readStdin,
+  readConfig,
+  readState,
+  writeState,
+  resolveBranch,
+  markPending,
+  markWork,
+  nudgesFor,
+  emitNudges,
+  emit,
+} from './lib.mjs';
 
-const BRANCH_RE = /\bgit\s+(?:checkout\s+-b|switch\s+-c|switch\s+--create)\s+(\S+)/;
+// Creation forms, including the capitalised variants (`checkout -B`, `switch
+// -C`) the harness itself prescribes when restarting a branch from a fresh base.
+const CREATE_RE = /\bgit\s+(?:checkout\s+-[bB]|switch\s+(?:-[cC]|--create|--force-create))\s+(\S+)/;
+const BRANCH_CMD_RE = /\bgit\s+branch\s+(?![-\s])(\S+)/;
+const PUSH_UPSTREAM_RE = /\bgit\s+push\b[^|;&]*?\s(?:-u|--set-upstream)\s+\S+\s+(\S+)/;
+const PUSH_RE = /\bgit\s+push\b/;
+// Any command that can move HEAD or publish it: re-resolve rather than parse.
+const BRANCH_TOUCH_RE = /\bgit\s+(?:checkout|switch|branch|push|worktree)\b/;
+const COMMIT_RE = /\bgit\s+commit\b/;
 const PR_OPEN_RE = /\bgh\s+pr\s+create\b/;
 
-// Milestone -> the CodBoard tool that mirrors it (used in the nudge text).
-const NUDGE = {
-  branch: 'the branch is not yet on CodBoard — call `set_task_branch` and move the task to in_progress',
-  pr: 'the PR is not yet on CodBoard — call `set_task_pull_request` (it lands on the execution timeline on its own)',
-};
+function parsedBranchName(command) {
+  const match =
+    command.match(CREATE_RE) || command.match(BRANCH_CMD_RE) || command.match(PUSH_UPSTREAM_RE);
+  return match ? match[1] : undefined;
+}
 
-function detect(command) {
-  const events = [];
-  const branch = command.match(BRANCH_RE);
-  if (branch) events.push({ key: 'branch', detail: branch[1] });
-  if (PR_OPEN_RE.test(command)) events.push({ key: 'pr', detail: undefined });
-  return events;
+function applyBranch(state, input, command) {
+  if (BRANCH_TOUCH_RE.test(command)) state.branch = resolveBranch(input) || state.branch;
+
+  const parsed = parsedBranchName(command);
+  if (parsed) return markPending(state, 'branch', parsed);
+
+  // A push only owes CodBoard a branch when it publishes a work branch.
+  const onWorkBranch = state.branch && state.branch.isDefault === false;
+  if (PUSH_RE.test(command) && onWorkBranch) markPending(state, 'branch', state.branch.name);
+}
+
+function apply(state, input, command) {
+  applyBranch(state, input, command);
+  if (COMMIT_RE.test(command)) markWork(state);
+  if (PR_OPEN_RE.test(command)) markPending(state, 'pr', undefined);
 }
 
 function main() {
@@ -26,37 +61,13 @@ function main() {
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo -> no-op
 
   const command = (input.tool_input && input.tool_input.command) || '';
-  const events = detect(command);
-  if (events.length === 0) emit(undefined);
+  if (!command) emit(undefined);
 
   const state = readState(input);
-  state.pending = state.pending || {};
-  state.nudged = state.nudged || {};
-
-  const nudges = [];
-  for (const ev of events) {
-    const prev = state.pending[ev.key] || {};
-    // never downgrade a synced milestone back to pending
-    state.pending[ev.key] = {
-      seen: true,
-      synced: prev.synced === true,
-      detail: ev.detail || prev.detail,
-    };
-    if (!state.pending[ev.key].synced && !state.nudged[ev.key]) {
-      state.nudged[ev.key] = true;
-      nudges.push(`CodBoard: ${NUDGE[ev.key]}.`);
-    }
-  }
-
+  apply(state, input, command);
+  const nudges = nudgesFor(state);
   writeState(input, state);
-
-  if (nudges.length === 0) emit(undefined);
-  emit({
-    hookSpecificOutput: {
-      hookEventName: 'PostToolUse',
-      additionalContext: nudges.join('\n'),
-    },
-  });
+  emitNudges(nudges);
 }
 
 try {

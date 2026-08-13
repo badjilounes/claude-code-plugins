@@ -1,72 +1,71 @@
 #!/usr/bin/env node
-// PreToolUse(Bash) — enforce the project's merge policy. CodBoard's
-// autoMergeMode of the repository being merged is the source of truth (cached from
-// post-codboard). This guard only ever acts on a `gh pr merge`; every other
-// Bash command passes through untouched.
-import { execFileSync } from 'node:child_process';
-import { readStdin, readConfig, readState, projectDir, emit } from './lib.mjs';
+// PreToolUse(Bash | mcp__*github*) — enforce the repository's merge policy.
+// CodBoard's autoMergeMode of the repository being merged is the source of
+// truth (cached from post-codboard).
+//
+// Both merge paths are guarded. Watching only `gh pr merge` left the plugin's
+// single hard `deny` unreachable from a Claude Code web session, where merges
+// go through the GitHub MCP server and the CLI does not exist. Every other
+// command and tool passes through untouched.
+import {
+  readStdin,
+  readConfig,
+  readState,
+  remoteUrl,
+  normalizeRepoUrl,
+  emit,
+} from './lib.mjs';
 
 const MERGE_RE = /\bgh\s+pr\s+merge\b/;
+const MERGE_TOOLS = new Set(['merge_pull_request', 'enable_pr_auto_merge']);
 
-function deny(reason) {
+function decide(decision, reason) {
   emit({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
+      permissionDecision: decision,
       permissionDecisionReason: reason,
     },
   });
 }
 
-function ask(reason) {
-  emit({
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'ask',
-      permissionDecisionReason: reason,
-    },
-  });
+function toolSuffix(toolName) {
+  const parts = String(toolName || '').split('__');
+  return parts[parts.length - 1] || '';
 }
 
-function normalizeRepoUrl(url) {
-  return String(url)
-    .trim()
-    .replace(/^git@([^:]+):/, 'https://$1/')
-    .replace(/\.git$/, '')
-    .replace(/\/+$/, '')
-    .toLowerCase();
-}
-
-// The remote of the directory the merge is being run in, matched against the
-// repositories cached from list_repositories. Unknown remote → unknown policy, which
-// asks rather than assumes.
-function mergeModeForCwd(state, input) {
-  const modes = state.mergeModes || {};
-  try {
-    const remote = execFileSync('git', ['config', '--get', 'remote.origin.url'], {
-      cwd: projectDir(input),
-      encoding: 'utf8',
-    });
-    return modes[normalizeRepoUrl(remote)];
-  } catch {
-    return undefined;
+// Which repository is about to be merged. An MCP call names it outright, which
+// is more precise than the working directory; a Bash merge is answered by the
+// remote of the directory it runs in.
+function targetRepoUrl(input) {
+  const suffix = toolSuffix(input.tool_name);
+  if (MERGE_TOOLS.has(suffix)) {
+    const { owner, repo } = input.tool_input || {};
+    return owner && repo ? `https://github.com/${owner}/${repo}` : undefined;
   }
+  return remoteUrl(input);
+}
+
+function isMerge(input) {
+  if (MERGE_TOOLS.has(toolSuffix(input.tool_name))) return true;
+  const command = (input.tool_input && input.tool_input.command) || '';
+  return MERGE_RE.test(command);
 }
 
 function main() {
   const input = readStdin();
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo
-
-  const command = (input.tool_input && input.tool_input.command) || '';
-  if (!MERGE_RE.test(command)) emit(undefined); // not a merge
+  if (!isMerge(input)) emit(undefined); // not a merge
 
   const state = readState(input);
-  // The policy belongs to the repository being merged (ADR 0069), so match the one
-  // this working directory actually is rather than answering for the whole project.
-  const mode = mergeModeForCwd(state, input);
+  // The policy belongs to the repository being merged (ADR 0069), so match the
+  // one this call actually targets rather than answering for the whole project.
+  const url = targetRepoUrl(input);
+  const mode = url ? (state.mergeModes || {})[normalizeRepoUrl(url)] : undefined;
 
   if (mode === 'none') {
-    deny(
+    decide(
+      'deny',
       "CodBoard autoMergeMode is 'none' for this repository: the owner merges. Do " +
         'not merge without explicit owner approval — ask the owner to perform or ' +
         'request the merge.',
@@ -74,7 +73,8 @@ function main() {
   }
 
   if (!mode) {
-    ask(
+    decide(
+      'ask',
       'CodBoard tracks this repo but its merge policy has not been read this ' +
         'session. Call `list_repositories` and check the `automation.autoMergeMode` ' +
         'of this repository (and satisfy its CI evidence) before merging. Proceed anyway?',
