@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "badjilounes": {
+      "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" }
+    }
+  },
+  "enabledPlugins": {
+    "codboard@badjilounes": true
+  }
+}
