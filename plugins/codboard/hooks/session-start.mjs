@@ -11,7 +11,6 @@ function trackedContext(cfg) {
     'This repository is tracked on CodBoard (the LLM task-tracking layer).',
     `- project: ${id(cfg.projectName)} (${id(cfg.projectId)})`,
     `- repository: ${id(cfg.repositoryName)} (${id(cfg.repositoryId)})`,
-    `- workflow: ${id(cfg.workflowId)}`,
     cfg.boardUrl ? `- board: ${cfg.boardUrl}` : undefined,
     '',
     'Sync is MANDATORY and STRONG for this repo.',
