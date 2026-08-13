@@ -55,7 +55,7 @@ function emptyState(sessionId) {
   return {
     sessionId,
     workflowRead: false,
-    autoMergeMode: undefined,
+    mergeSettled: false,
     pending: {},
     nudged: {},
   };
@@ -130,6 +130,22 @@ export function resolveBranch(input) {
 
 export function remoteUrl(input) {
   return git(input, ['config', '--get', 'remote.origin.url']);
+}
+
+// --- merge -----------------------------------------------------------------
+
+// The two ways a merge actually happens: the CLI, and the GitHub MCP server a
+// hosted session has instead of it. Shared, so the guard that stops a forbidden
+// merge and the ledger that notices a due one can never disagree on what counts
+// as merging.
+export const MERGE_COMMAND_RE = /\bgh\s+pr\s+merge\b/;
+export const MERGE_TOOLS = new Set(['merge_pull_request', 'enable_pr_auto_merge']);
+
+// A PR opened under a non-`none` policy owes the session an outcome. Merging is
+// one; reporting a barrier that did not hold is the other. Both settle it —
+// what the Stop gate refuses is silence, not a red CI.
+export function markMergeSettled(state) {
+  state.mergeSettled = true;
 }
 
 export function normalizeRepoUrl(url) {

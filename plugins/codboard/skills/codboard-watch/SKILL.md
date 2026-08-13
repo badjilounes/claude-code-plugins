@@ -73,3 +73,10 @@ move the task to the workflow's terminal status; CodBoard records the merge.
   Evidence: `{ status: "success", ranLocally: true }`.
 - **without_ci** — merge the mergeable PR immediately, no barrier, no confirmation.
   Evidence: `{ status: "not_required" }`.
+
+This is enforced, not merely written: the `Stop` hook **blocks the end of the turn** while a PR
+you opened sits on a repository whose mode is not `none` and the session has neither merged it
+nor accounted for it. Two outcomes settle the gate — the merge (declared with
+`set_task_pull_request({ pullRequestStatus: "merged" })`), or an honest report of a barrier that
+did not hold (`log_activity` with `tests_failed`/`error`, or the task moved to a blocked status).
+Handing the merge back to the user is not one of them.
