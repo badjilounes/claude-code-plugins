@@ -37,15 +37,17 @@ Resolve automatically when possible; ask the user to pick **only** if none of th
 4. If exactly one project exists, use it.
 5. Otherwise show the project list and let the user select one.
 
-Keep `projectId`, project name, and `workspaceId`.
+Keep `projectId` and the project name.
 
 ## 3. Fill in the binding (no questions)
 
 - `git remote get-url origin`, `list_repositories` for the project, match on the remote.
   If a repository matches, keep its `repositoryId`/name; if none does, `create_repository`
   from the remote and keep the new id (on failure, use `null`). No prompt.
-- `get_workflow` for the project and keep its `workflowId`. (Do not copy any workflow
-  values into the repo — the hooks re-read them via `get_workflow`.)
+
+Nothing else is resolved, and in particular **no workflow**: a project holds several named
+workflows and no default, each elected per request type, so no single id is true for a
+repository. The agent reads them at runtime with `list_workflows` / `get_workflow`.
 
 ## 4. Write `.codboard/config.json` (+ gitignore the ledger, + enable the plugin)
 
@@ -56,13 +58,17 @@ auth is OAuth per user):
 {
   "projectId": "<step 2>",
   "projectName": "<step 2>",
-  "workspaceId": "<step 2>",
   "repositoryId": "<step 3, or null>",
   "repositoryName": "<step 3>",
-  "workflowId": "<step 3>",
   "boardUrl": "https://codboard.com/projects/<projectId>/board"
 }
 ```
+
+Those five and no more. `projectId` scopes every call, `repositoryId` is what the agent
+writes tasks against; the two names and `boardUrl` are there to be read by a human. A field
+nobody reads cannot be noticed when it goes stale — which is what happened to the
+`workflowId` and `workspaceId` this file used to write. An older pointer that still carries
+them stays valid: the extra keys are simply ignored.
 
 Ensure `.gitignore` contains `.codboard/session-state.json` (the hooks' local ledger — the
 only part of `.codboard/` that must NOT be committed). Append the line if absent; create

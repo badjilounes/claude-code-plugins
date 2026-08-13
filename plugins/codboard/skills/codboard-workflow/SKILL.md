@@ -18,8 +18,9 @@ You drive this repository's work through **CodBoard**, our LLM task-tracking lay
 ## At the start of every session — load the workflow
 
 1. Resolve the project. If this repo has been initialised (`/codboard:init`), read
-   `.codboard/config.json` at the repo root and use its `projectId` / `workflowId` /
-   `repositoryId` directly — that committed pointer is the binding, don't re-guess. Only
+   `.codboard/config.json` at the repo root and use its `projectId` / `repositoryId`
+   directly — that committed pointer is the binding, don't re-guess. It names no workflow:
+   there is no such thing as *the* workflow of a repository (step 2 elects one). Only
    if it is missing, `list_projects` and pick the project this repository belongs to (and
    suggest running `/codboard:init` to make the binding permanent). Remember its `projectId`.
 2. Read the configuration from **three** places. A workflow is a state machine and nothing

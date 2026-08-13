@@ -155,8 +155,10 @@ Une commande à lancer une fois par repo. **Une seule interaction : sélectionne
 (et seulement s'il n'est pas résolu automatiquement — `.codboard/config.json` existant,
 argument, remote git, ou projet unique). Elle écrit alors, sans autre validation :
 
-- **`.codboard/config.json`** (committé, sans secret) : `projectId`, `repositoryId`,
-  `workflowId`, `boardUrl`. C'est *la* liaison repo ↔ projet CodBoard.
+- **`.codboard/config.json`** (committé, sans secret) : `projectId`, `repositoryId`, les deux
+  noms lisibles et `boardUrl`. C'est *la* liaison repo ↔ projet CodBoard — et rien d'autre :
+  aucun workflow n'y est nommé (un projet en porte plusieurs, élus par type de ticket), et
+  tout paramètre recopié ici périmerait en silence.
 - la ligne `.gitignore` du ledger de session (`.codboard/session-state.json`) — la seule
   partie de `.codboard/` à ne pas committer.
 - **`.claude/settings.json`** (committé, en **fusion** — les autres plugins et hooks du repo
