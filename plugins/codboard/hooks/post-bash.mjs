@@ -17,6 +17,8 @@ import {
   resolveBranch,
   markPending,
   markWork,
+  markMergeSettled,
+  MERGE_COMMAND_RE,
   nudgesFor,
   emitNudges,
   emit,
@@ -54,6 +56,7 @@ function apply(state, input, command) {
   applyBranch(state, input, command);
   if (COMMIT_RE.test(command)) markWork(state);
   if (PR_OPEN_RE.test(command)) markPending(state, 'pr', undefined);
+  if (MERGE_COMMAND_RE.test(command)) markMergeSettled(state);
 }
 
 function main() {

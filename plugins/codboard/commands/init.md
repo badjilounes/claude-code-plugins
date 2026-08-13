@@ -1,5 +1,5 @@
 ---
-description: Bind this repository to its CodBoard project by writing the .codboard/config.json pointer. The only question is which project.
+description: Bind this repository to its CodBoard project — writes the .codboard/config.json pointer and enables the plugin, repairing either if it is missing. The only question is which project.
 argument-hint: "[project name or id]"
 allowed-tools: Bash(git remote:*), Read, Write, Edit
 ---
@@ -10,6 +10,11 @@ Write the committed **pointer** `.codboard/config.json` that ties this repo to i
 project. The plugin's hooks and skills read it at runtime; the workflow / automation /
 testing / reporting configuration stays in CodBoard (source of truth via `get_workflow`),
 never copied into the repo.
+
+**Re-running this on an already-bound repo is the supported repair path**, not a no-op: a repo
+initialised before the plugin was declared in `.claude/settings.json` carries the pointer and is
+guarded by nothing, silently. Re-init resolves the same project without asking and writes back
+whatever is missing.
 
 **Keep it frictionless.** The **only** thing the user does is **select their project** (and
 only if it can't be resolved automatically). Do not ask anything else. Write the file(s),
@@ -85,6 +90,11 @@ other key: a repo typically already declares other plugins and its own `hooks`. 
 Both keys are required: without `extraKnownMarketplaces`, `codboard@badjilounes` does not
 resolve and the entry in `enabledPlugins` does nothing.
 
+**Repair, every time.** Check both keys even when `.codboard/config.json` already exists, and
+add whichever is missing. "The repo is already initialised" never means "nothing to do": the
+repos that need this most are precisely the ones bound before the command wrote this file —
+they carry the pointer, look configured, and run no hook at all.
+
 Those three writes are the whole of it. Nothing else: no `CLAUDE.md` edit (the SessionStart
 hook injects the pointer from `config.json` every session, so it is redundant), no PR
 template, no `AGENTS.md` / `copilot-instructions.md` (a PR template is the client's own
@@ -93,7 +103,8 @@ choice; non-Claude agents are covered by their own per-provider CodBoard plugin)
 ## 5. Summarise
 
 Report the resolved project / repo / workflow ids and the three files touched
-(`.codboard/config.json`, the `.gitignore` line, `.claude/settings.json`). Then state the
+(`.codboard/config.json`, the `.gitignore` line, `.claude/settings.json`) — naming, for a
+re-init, which keys were already there and which ones you had to add. Then state the
 manual next steps — **which this command does not perform**:
 
 - **review and commit the three files** — until `.claude/settings.json` is committed and

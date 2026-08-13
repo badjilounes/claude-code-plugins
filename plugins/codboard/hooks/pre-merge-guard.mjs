@@ -13,11 +13,10 @@ import {
   readState,
   remoteUrl,
   normalizeRepoUrl,
+  MERGE_COMMAND_RE,
+  MERGE_TOOLS,
   emit,
 } from './lib.mjs';
-
-const MERGE_RE = /\bgh\s+pr\s+merge\b/;
-const MERGE_TOOLS = new Set(['merge_pull_request', 'enable_pr_auto_merge']);
 
 function decide(decision, reason) {
   emit({
@@ -49,7 +48,7 @@ function targetRepoUrl(input) {
 function isMerge(input) {
   if (MERGE_TOOLS.has(toolSuffix(input.tool_name))) return true;
   const command = (input.tool_input && input.tool_input.command) || '';
-  return MERGE_RE.test(command);
+  return MERGE_COMMAND_RE.test(command);
 }
 
 function main() {

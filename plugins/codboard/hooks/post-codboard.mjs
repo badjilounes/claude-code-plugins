@@ -13,6 +13,7 @@ import {
   readState,
   writeState,
   markSynced,
+  markMergeSettled,
   extractPayloads,
   pick,
   normalizeRepoUrl,
@@ -41,9 +42,16 @@ function cacheWorkflow(state, wf) {
     .filter((s) => s && (s.terminal === true || s.category === 'done'))
     .map((s) => s.key)
     .filter(Boolean);
+  // Blocked statuses are read for the merge gate: parking a task is one of the
+  // two ways a due merge can legitimately not happen.
+  const blocked = statuses
+    .filter((s) => s && s.category === 'blocked')
+    .map((s) => s.key)
+    .filter(Boolean);
   state.policy = {
     ...(state.policy || {}),
     terminalStatuses: terminal.length ? terminal : ['done'],
+    blockedStatuses: blocked.length ? blocked : ['blocked'],
   };
   state.workflowRead = true;
 }
@@ -110,6 +118,22 @@ function applyMilestone(state, input, suffix) {
   }
 }
 
+// The merge gate asks for an OUTCOME, not for a merge. A PR declared merged or
+// closed settles it — and so does an honest account of a barrier that did not
+// hold: a failing check logged on the run, or the task parked in a blocked
+// status. Only silence is refused.
+function applyMergeOutcome(state, input, suffix) {
+  const args = input.tool_input || {};
+  const settledBy = {
+    set_task_pull_request: () => ['merged', 'closed'].includes(args.pullRequestStatus),
+    log_activity: () => ['tests_failed', 'error'].includes(args.type),
+    change_task_status: () =>
+      Boolean(args.toStatus) &&
+      ((state.policy && state.policy.blockedStatuses) || ['blocked']).includes(args.toStatus),
+  };
+  if (settledBy[suffix] && settledBy[suffix]()) markMergeSettled(state);
+}
+
 function main() {
   const input = readStdin();
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo
@@ -126,6 +150,7 @@ function main() {
   }
 
   applyMilestone(state, input, suffix);
+  applyMergeOutcome(state, input, suffix);
   writeState(input, state);
 
   // D1 (ADR 0044): a status change makes CodBoard's read-only remote mirrors

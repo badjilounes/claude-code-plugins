@@ -202,6 +202,70 @@ scenario('merge guard covers both paths', () => {
   check('unrelated github tool passes', guardMcp('get_file_contents', { owner: 'o', repo: 'r' }) === undefined);
 });
 
+// The other half of the merge doctrine: pre-merge-guard stops the merge that
+// must not happen, this gate stops the turn that ends without the merge that
+// must. Both outcomes are accepted — merging, or saying why you could not.
+scenario('a due merge left undone blocks the Stop', () => {
+  const policy = (autoMergeMode) =>
+    cb('list_repositories', {}, [
+      { url: 'https://github.com/badjilounes/playground-factory', automation: { autoMergeMode } },
+    ]);
+  const openPr = () =>
+    gh('create_pull_request', { owner: 'badjilounes', repo: 'playground-factory' }, { number: 42, html_url: 'https://x/42' });
+  const mirror = () => {
+    cb('start_execution', {}, { executionId: 'e1' });
+    cb('set_task_branch', {}, {});
+    cb('set_task_pull_request', { pullRequestStatus: 'open' }, {});
+  };
+  const session = (branch, mode = 'local_ci_green') => {
+    setup(branch);
+    start();
+    policy(mode);
+    openPr();
+    mirror();
+  };
+
+  session('claude/merge-due');
+  const r = stop();
+  check('Stop BLOCKS on the PR left open', blocked(r) && reason(r).includes('Automation'), reason(r));
+  check('  names the mode that authorised it', reason(r).includes('local_ci_green'));
+  check('  names the PR', reason(r).includes('#42'), reason(r));
+
+  session('claude/merge-bash');
+  bash('gh pr merge 42 --squash');
+  check('a `gh pr merge` settles it', !blocked(stop()));
+
+  session('claude/merge-mcp');
+  gh('merge_pull_request', { owner: 'badjilounes', repo: 'playground-factory', pullNumber: 42 }, {});
+  check('an MCP merge settles it', !blocked(stop()));
+
+  session('claude/merge-declared');
+  cb('set_task_pull_request', { pullRequestStatus: 'merged' }, {});
+  check('a merged declaration settles it', !blocked(stop()));
+
+  session('claude/merge-barrier');
+  cb('log_activity', { type: 'tests_failed' }, {});
+  check('a barrier reported as failed settles it', !blocked(stop()));
+
+  setup('claude/merge-parked');
+  start();
+  cb('get_workflow', {}, { statuses: [{ key: 'stuck', category: 'blocked' }, { key: 'done', terminal: true }] });
+  policy('ci_green');
+  openPr();
+  mirror();
+  cb('change_task_status', { toStatus: 'stuck' }, {});
+  check('parking the task in a blocked status settles it', !blocked(stop()));
+
+  session('claude/merge-none', 'none');
+  check('`none` never asks for a merge', !blocked(stop()), reason(stop()));
+
+  setup('claude/merge-unread');
+  start();
+  openPr();
+  mirror();
+  check('an unread policy never blocks', !blocked(stop()), reason(stop()));
+});
+
 scenario('untracked repo stays inert', () => {
   setup('claude/x', { tracked: false });
   check('post-bash silent', bash('git push -u origin claude/x') === undefined);

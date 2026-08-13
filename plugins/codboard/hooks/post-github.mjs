@@ -14,6 +14,8 @@ import {
   resolveBranch,
   markPending,
   markWork,
+  markMergeSettled,
+  MERGE_TOOLS,
   extractPayloads,
   pick,
   nudgesFor,
@@ -47,6 +49,7 @@ function apply(state, input, suffix) {
   if (PR_OPEN.has(suffix)) markPending(state, 'pr', pullRequestDetail(input));
   if (BRANCH_OPEN.has(suffix)) markPending(state, 'branch', branchDetail(input, state));
   if (WRITES.has(suffix)) markWork(state);
+  if (MERGE_TOOLS.has(suffix)) markMergeSettled(state);
 }
 
 function main() {
@@ -54,7 +57,9 @@ function main() {
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo -> no-op
 
   const suffix = toolSuffix(input.tool_name);
-  if (!PR_OPEN.has(suffix) && !BRANCH_OPEN.has(suffix) && !WRITES.has(suffix)) emit(undefined);
+  if (!PR_OPEN.has(suffix) && !BRANCH_OPEN.has(suffix) && !WRITES.has(suffix) && !MERGE_TOOLS.has(suffix)) {
+    emit(undefined);
+  }
 
   const state = readState(input);
   if (!state.branch) state.branch = resolveBranch(input);
