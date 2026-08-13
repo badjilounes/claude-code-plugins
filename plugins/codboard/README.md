@@ -74,6 +74,13 @@ CodBoard** (login email/mdp ou « Continuer avec mon compte CodBoard » → Goog
 
 ## Cible 1 — Install en CLI (Claude Code local)
 
+> **Cet install ne survit pas à une session hébergée.** `claude plugin install` écrit dans
+> `~/.claude/`, et Claude Code web démarre chaque session dans un conteneur neuf : le plugin
+> n'y est pas, aucun hook ne tourne, et **rien ne signale l'absence** — un repo peut porter
+> `.codboard/config.json` et n'être gardé par rien. Le CLI sert à essayer le plugin sur ta
+> machine ; le point durable est le `.claude/settings.json` committé de la **Cible 2**, que
+> `/codboard:init` écrit désormais pour toi.
+
 ```bash
 claude plugin marketplace add badjilounes/claude-code-plugins
 claude plugin install codboard@badjilounes
@@ -152,17 +159,27 @@ argument, remote git, ou projet unique). Elle écrit alors, sans autre validatio
   `workflowId`, `boardUrl`. C'est *la* liaison repo ↔ projet CodBoard.
 - la ligne `.gitignore` du ledger de session (`.codboard/session-state.json`) — la seule
   partie de `.codboard/` à ne pas committer.
+- **`.claude/settings.json`** (committé, en **fusion** — les autres plugins et hooks du repo
+  sont préservés) : `extraKnownMarketplaces.badjilounes` + `enabledPlugins`
+  `["codboard@badjilounes"]`. Sans lui le pointeur ne sert à rien en session hébergée : le
+  repo est *tracké* mais le plugin n'est pas *installé*, donc aucun hook ne tourne. Les deux
+  clés vont ensemble — sans la marketplace, `codboard@badjilounes` ne résout pas.
 
 Puis elle **s'arrête** : pas de `git add` / commit / merge — les fichiers restent en working
 tree, l'utilisateur les revoit et les commit lui-même.
 
 **Rien d'autre n'est écrit.** Pas d'édition de `CLAUDE.md` (le hook `SessionStart` lit
 `config.json` et injecte le pointeur à chaque session — un bloc dans `CLAUDE.md` serait
-redondant), pas de PR template, pas de `AGENTS.md` / `copilot-instructions.md`. Activer le
-plugin pour toute l'équipe reste une étape **optionnelle et manuelle** (le
-`.claude/settings.json` committé de la « Cible 2 » ci-dessus). Un PR template est un choix
-propre au client ; les agents non-Claude relèvent de **leurs plugins dédiés**
-(Copilot/Cursor/Codex).
+redondant), pas de PR template, pas de `AGENTS.md` / `copilot-instructions.md`. Un PR
+template est un choix propre au client ; les agents non-Claude relèvent de **leurs plugins
+dédiés** (Copilot/Cursor/Codex).
+
+> **Pourquoi `.claude/settings.json` n'est plus optionnel.** Il l'était jusqu'à la v0.8.0,
+> et c'est ce qui a produit la panne : un repo portait `.codboard/config.json` sans que le
+> plugin soit déclaré, donc tournait sans le moindre hook, sans que rien ne le signale.
+> Écrire le pointeur sans activer le plugin, c'est livrer une serrure sans porte. Le fichier
+> change bien la config de toute personne qui clone — c'est l'effet voulu, et `/codboard:init`
+> le dit explicitement avant que l'utilisateur commit.
 
 ### 2. Les hooks — l'application déterministe
 
