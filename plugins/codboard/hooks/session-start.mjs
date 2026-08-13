@@ -3,7 +3,7 @@
 // knows it, without depending on a skill being triggered. Injects a pointer as
 // additionalContext and resets the per-session sync ledger.
 import { existsSync, writeFileSync } from 'node:fs';
-import { readStdin, readConfig, statePath, projectDir, emit } from './lib.mjs';
+import { readStdin, readConfig, statePath, projectDir, resolveBranch, emit } from './lib.mjs';
 
 function trackedContext(cfg) {
   const id = (v) => (v ? String(v) : 'unknown');
@@ -42,11 +42,12 @@ function trackedContext(cfg) {
     '   unsatisfied barrier (e.g. CI red) means you do NOT merge and you fix/report it — you',
     '   still never ask "should I merge?".',
     '',
-    'Enforcement: the turn is BLOCKED from ending while a created branch or an opened PR is',
-    'unmirrored, or while the daily report is stale versus `reportingCadence`; and a',
-    '`gh pr merge` that violates the repository `autoMergeMode` is blocked. Test plan and',
-    'capture are no longer a local gate: when a transition requires them, the SERVER refuses',
-    'the move — call `get_transition_policy` to see what is still missing before you try.',
+    'Enforcement: the turn is BLOCKED from ending while this session has changed code with no',
+    'run open, while a created or pushed branch or an opened PR is unmirrored, or while the',
+    'daily report is stale versus `reportingCadence`; and a merge that violates the repository',
+    '`autoMergeMode` is blocked whether it goes through `gh pr merge` or the GitHub MCP server.',
+    'Test plan and capture are no longer a local gate: when a transition requires them, the',
+    'SERVER refuses the move — call `get_transition_policy` to see what is missing before you try.',
   ]
     .filter((l) => l !== undefined)
     .join('\n');
@@ -66,13 +67,23 @@ function main() {
   const cfg = readConfig(input);
 
   // Reset the ledger for the new session (best-effort; only if .codboard exists).
+  // The branch is captured here because in a hosted session it is created by the
+  // harness before the first turn — no command the hooks can observe ever makes
+  // it, so a ledger that only learns branches from `git checkout -b` never sees
+  // the one the work actually happens on.
   if (cfg) {
     try {
       const sp = statePath(input);
       writeFileSync(
         sp,
         JSON.stringify(
-          { sessionId: input.session_id, workflowRead: false, pending: {}, nudged: {} },
+          {
+            sessionId: input.session_id,
+            workflowRead: false,
+            branch: resolveBranch(input),
+            pending: {},
+            nudged: {},
+          },
           undefined,
           2,
         ),

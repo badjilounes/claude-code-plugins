@@ -36,12 +36,15 @@ claude-code-plugins/               (repo = marketplace)
     │   └── init.md               # /codboard:init — lie le repo à son projet (pointeur committé)
     ├── hooks/
     │   ├── hooks.json            # câblage : SessionStart / Pre+PostToolUse / Stop
-    │   ├── lib.mjs               # helpers partagés (pointeur + ledger local, zéro appel API)
-    │   ├── session-start.mjs     # injecte le workflow au démarrage + reset du ledger
-    │   ├── post-bash.mjs         # consigne branche/PR créées + rappel juste-à-temps
+    │   ├── lib.mjs               # helpers partagés (pointeur + ledger local + git, zéro appel API)
+    │   ├── session-start.mjs     # injecte le workflow au démarrage + reset du ledger + capte la branche
+    │   ├── post-work.mjs         # consigne « du code a changé » (gate d'existence)
+    │   ├── post-bash.mjs         # consigne branche créée/poussée, PR, commit + rappel juste-à-temps
+    │   ├── post-github.mjs       # idem via le serveur MCP GitHub (sessions web, sans `gh`)
     │   ├── post-codboard.mjs     # solde les jalons synchronisés + cache autoMergeMode
-    │   ├── pre-merge-guard.mjs   # bloque un merge contraire à autoMergeMode
-    │   └── stop-check.mjs        # bloque la fin de tour tant qu'un jalon n'est pas synchro
+    │   ├── pre-merge-guard.mjs   # bloque un merge contraire à autoMergeMode (Bash *et* MCP)
+    │   ├── stop-check.mjs        # bloque la fin de tour tant qu'un jalon n'est pas synchro
+    │   └── hooks.test.mjs        # `node hooks/hooks.test.mjs` — rejoue les sessions qui passaient au travers
     ├── skills/
     │   ├── codboard-workflow/        # entrée : lit .codboard/config.json, charge get_workflow
     │   ├── codboard-task/            # cycle de vie d'une tâche (request → tasks, présence)
@@ -169,11 +172,13 @@ committé) alimenté par ce qu'ils observent des appels d'outils.
 
 | Hook | Événement | Ce qu'il garantit |
 | --- | --- | --- |
-| `session-start` | `SessionStart` | Chaque session d'un repo tracké démarre en connaissant CodBoard et l'ordre d'appeler `get_workflow` — sans dépendre du déclenchement d'une skill. Repo non initialisé ⇒ propose `/codboard:init`. |
-| `post-bash` | `PostToolUse(Bash)` | Consigne « branche créée » / « PR ouverte » dans le ledger et pousse un rappel juste-à-temps (une fois par jalon). |
-| `post-codboard` | `PostToolUse(mcp __*codboard*__)` | Met en cache **les 4 sections** de `get_workflow` (Workflow/Automation/Testing/Report) dans le ledger, et solde les obligations au fil des appels (`set_task_branch`, `set_task_pull_request`, `add_test_step`, `create_media_upload`, `upsert_report`, `complete_execution`/`change_task_status`→terminal). **Miroirs distants (ADR 0044) :** à chaque `change_task_status`/`change_request_status`, rappelle à l'agent de **redéclarer** les miroirs distants en lecture seule — statut du ticket via `update_request` (remoteStatus) et état de PR via `set_task_pull_request` — pour que les badges restent frais. Le hook ne lit jamais le distant ni n'appelle l'API : c'est l'agent, déjà connecté, qui redéclare. |
-| `pre-merge-guard` | `PreToolUse(Bash)` | Intercepte `gh pr merge` : **deny** si `autoMergeMode: none`, **ask** si la politique n'a pas encore été lue, **laisse passer sans confirmation** les modes permissifs (le mode configuré vaut autorisation). |
-| `stop-check` | `Stop` | **Bloque la fin du tour** tant qu'une obligation des 4 sections n'est pas remplie (branche/PR non mirroré, plan de test/capture manquant si requis, report périmé vs cadence). Garde anti-boucle via `stop_hook_active`. |
+| `session-start` | `SessionStart` | Chaque session d'un repo tracké démarre en connaissant CodBoard et l'ordre d'appeler `get_workflow` — sans dépendre du déclenchement d'une skill. **Capte aussi la branche courante** (`git rev-parse`), parce qu'en session hébergée elle est créée par le harness avant le premier tour : aucune commande observable ne la fabrique. Repo non initialisé ⇒ propose `/codboard:init`. |
+| `post-work` | `PostToolUse(Edit\|Write\|…)` | **Gate d'existence** : consigne que la session a modifié du code. Sans lui, éditer → commit → push → stop satisfait tous les autres gates avec zéro ticket sur le board. |
+| `post-bash` | `PostToolUse(Bash)` | Consigne branche **créée ou poussée** (toutes les formes : `checkout -b`/`-B`, `switch -c`/`-C`/`--create`, `git branch`, `push -u`, et tout `git push` sur une branche de travail), PR ouverte, commit — puis pousse un rappel juste-à-temps (une fois par jalon). |
+| `post-github` | `PostToolUse(mcp __*github*__)` | Les mêmes jalons via le **serveur MCP GitHub** : `create_pull_request`, `create_branch`, `push_files`. Indispensable en session Claude Code web, où `gh` n'existe pas — sans lui la détection de PR est structurellement morte. |
+| `post-codboard` | `PostToolUse(mcp __*codboard*__)` | Met en cache la config des **trois** sources (`get_workflow`, `get_project`, `list_repositories`) dans le ledger, et solde les obligations au fil des appels (`start_execution`/`log_activity` soldent le gate d'existence ; `set_task_branch`, `set_task_pull_request`, `upsert_report`, `complete_execution`/`change_task_status`→terminal). **Miroirs distants (ADR 0044) :** à chaque `change_task_status`/`change_request_status`, rappelle à l'agent de **redéclarer** les miroirs distants en lecture seule — statut du ticket via `update_request` (remoteStatus) et état de PR via `set_task_pull_request` — pour que les badges restent frais. Le hook ne lit jamais le distant ni n'appelle l'API : c'est l'agent, déjà connecté, qui redéclare. |
+| `pre-merge-guard` | `PreToolUse(Bash \| mcp __*github*__)` | Intercepte `gh pr merge` **et** `merge_pull_request`/`enable_pr_auto_merge` : **deny** si `autoMergeMode: none`, **ask** si la politique n'a pas encore été lue, **laisse passer sans confirmation** les modes permissifs (le mode configuré vaut autorisation). Un appel MCP nomme son dépôt (`owner`/`repo`), ce qui est plus précis que le remote du répertoire courant. |
+| `stop-check` | `Stop` | **Bloque la fin du tour** tant qu'une obligation n'est pas remplie : code modifié sans run ouvert, branche/PR non mirroré, report périmé vs cadence. Garde anti-boucle via `stop_hook_active`. |
 
 La config est **lue à l'exécution** (jamais figée) depuis **trois** sources — un workflow est
 une machine à états et rien d'autre (ADR 0069) — et mappée à l'enforcement :
@@ -186,9 +191,17 @@ une machine à états et rien d'autre (ADR 0069) — et mappée à l'enforcement
 | **Plan de test & capture** | `policy.proofs.{testPlan, capture}` sur une transition | Plus de gate local : quand la transition l'exige, c'est le **serveur** qui refuse le passage. `get_transition_policy` dit ce qui manque avant d'essayer. |
 
 Tous les hooks **no-op** hors d'un repo tracké (pas de `.codboard/config.json`) et
-n'échouent jamais une session (toute erreur interne → sortie 0 silencieuse). Les gates
+n'échouent jamais une session (toute erreur interne → sortie 0 silencieuse). Le gate
 Report ne s'active qu'une fois `get_project` lu (politique inconnue ⇒ pas de
-blocage surprise) ; les gates branche/PR et la garde de merge sont toujours actifs.
+blocage surprise) ; les gates existence, branche/PR et la garde de merge sont toujours actifs.
+
+> **Deux règles tirées d'une session qui est passée au travers.** (1) Un capteur qui
+> n'observe que `Bash` + `gh` est **aveugle dans l'environnement principal du plugin** :
+> une session Claude Code web n'a pas de `gh`, et sa branche est créée par le harness avant
+> le premier tour. Chaque gate doit donc couvrir la voie Bash **et** la voie MCP. (2) Vérifier
+> qu'un jalon est *mirroré* ne vérifie jamais qu'il *existe* : tant qu'aucun gate ne
+> demandait « où est le run ? », travailler sans ticket satisfaisait toutes les conditions.
+> `hooks/hooks.test.mjs` rejoue ces deux cas — lance-le après toute modification des hooks.
 
 ### 3. Filet côté serveur
 

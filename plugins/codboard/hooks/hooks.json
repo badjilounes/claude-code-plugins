@@ -19,6 +19,15 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-merge-guard.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*github.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-merge-guard.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -32,11 +41,29 @@
         ]
       },
       {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-work.mjs\""
+          }
+        ]
+      },
+      {
         "matcher": "mcp__.*codboard.*",
         "hooks": [
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-codboard.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*github.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-github.mjs\""
           }
         ]
       }
