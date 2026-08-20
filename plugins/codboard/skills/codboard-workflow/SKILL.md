@@ -36,9 +36,11 @@ You drive this repository's work through **CodBoard**, our LLM task-tracking lay
      returned in its effective form), `reportingCadence`, `autoRun` (the work queue) and
      `watch` { comments, pollHint }. These are the project's, whatever workflow governs a ticket.
    - **`list_repositories({ projectId })`** — per repository, `automation` { `autoMergeMode`,
-     `autoCreatePr`, `ciCheckName` }. Apply the policy of **the repository the task belongs
-     to**: two repositories of one project may answer differently, and `ciCheckName` names a
-     check of one of them.
+     `autoCreatePr`, `ciCheckName` } and `technology`. Apply the policy of **the repository the
+     task belongs to**: two repositories of one project may answer differently, and
+     `ciCheckName` names a check of one of them. `technology` decides the **nature** of the
+     proof that repository's tasks must attach, and the tool that produces it — see
+     codboard-task › "Prove what the technology demands".
 
 These runtime values parameterize everything below. Re-read them each session rather than
 assuming a fixed shape. When you work a specific task, resolve its workflow with
@@ -68,6 +70,7 @@ nothing and answers what the move demands and what is still missing:
 
 ```
 { mode, actor, requires, proofs, performRoles,
+  proofExpectation: { technologies, declared, natures, recipes: [{ tool, instruction }] },
   missing: ["branch", "pull request", "green tests", "settled acceptance criteria"],  // in reporting order
   approvalGranted, wouldBlock }
 ```
@@ -86,13 +89,16 @@ yet):
   an approval directive and wait (see codboard-task), then retry.
 - **`policy.human.perform`** — restricts which project roles (admin/editor/viewer) may perform
   the move. Enforced from the authenticated caller, not something you can set.
-- **`policy.proofs` { branch, pullRequest, tests, acceptanceCriteria }** — required observed
-  evidence before the move. Under a `strict` transition a missing proof **blocks**; under
-  `advisory` it is only audited. Attach the branch / open the PR / make tests green first.
-  `acceptanceCriteria` is satisfied once the request carries at least one criterion and none
-  is left `pending` or `failed` — settle each one (`update_acceptance_criterion`) rather than
-  closing the ticket over an unanswered criterion. A `waived` criterion counts as settled,
-  since it already carries its reason.
+- **`policy.proofs` { branch, pullRequest, tests, acceptanceCriteria, testPlan, capture }** —
+  required observed evidence before the move. Under a `strict` transition a missing proof
+  **blocks**; under `advisory` it is only audited. Attach the branch / open the PR / make tests
+  green first. `acceptanceCriteria` is satisfied once the request carries at least one criterion
+  and none is left `pending` or `failed` — settle each one (`update_acceptance_criterion`)
+  rather than closing the ticket over an unanswered criterion. A `waived` criterion counts as
+  settled, since it already carries its reason. `capture` is **not** satisfied by any file:
+  the proof must be of the nature the technology of the change demands, and on a repository
+  typed `monorepo` the technologies must be declared first — read `proofExpectation` (above)
+  rather than guessing, and see codboard-task › "Prove what the technology demands".
 
 ## Auto-run — does this project hand out work?
 

@@ -1,7 +1,7 @@
 {
   "name": "codboard",
   "displayName": "CodBoard",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Give Claude an audited task board for the tickets it works, with strong automatic sync: turn a ticket into a request, break it into tasks, drive them to done, and keep status, branch, PR and the daily report in sync — then watch open PRs, drain agent directives (requested PR create/merge), and act on new comments. `/codboard:init` binds a repo to its project and enables the plugin in the committed `.claude/settings.json`, so hosted sessions actually start with it; deterministic hooks inject the workflow at session start, block a turn from ending while the session changed code with no run open or while a milestone is unsynced, and block a merge that violates the project's policy — through the shell and through the GitHub MCP server alike. Bundles the CodBoard MCP server and its watcher workflow as on-demand skills.",
   "author": {
     "name": "CodBoard",
