@@ -115,9 +115,40 @@ If you stop pinging, the task shows stale, then offline, on its own.
     `policy.proofs.acceptanceCriteria` checks, and it is the honest record of what the work
     actually proved.
 14. `record_work_note` with kind `finished`.
-15. Attach a **test plan** so a human can replay and validate → see below.
+15. Attach a **test plan** so a human can replay and validate, with a proof of the nature
+    the technology demands → see below.
 16. `complete_execution` (or `fail_execution`) to close your run.
 17. Then refresh the report per cadence → skill **codboard-report**.
+
+## Prove what the technology demands
+
+A capture is judged on **what it shows**, not on its mere presence: a screenshot proves
+nothing about an API, and a response body proves nothing about a screen. The **technology of
+the repository** (`list_repositories` → `technology`) decides the nature of the proof a
+transition's `capture` accepts, and the tool that produces it:
+
+| Technology | Tool | What to attach |
+| --- | --- | --- |
+| `frontend` | Playwright | a screenshot, or a video when the behaviour only exists in motion |
+| `backend` | cURL | the response itself — status line and body, as returned |
+| `mobile` | Maestro | a screenshot, or a video for a flow that spans screens |
+| `mcp` | an LLM call | the response the tool returned, verbatim |
+| `documentation` | the rendered document | the content a reader sees — the interpreted rendering for a `.md`, not the raw source |
+| `monorepo` | discovery | nothing by itself: see below |
+
+Never guess it: `get_transition_policy({ id, toStatus })` answers `proofExpectation`
+{ `technologies`, `declared`, `natures`, `recipes` [{ `tool`, `instruction` }] } — what is
+expected, and how to produce it, before you try.
+
+**A repository typed `monorepo` has no technology of its own.** CodBoard never sees your
+files, so only you can say which apps the change touches: read the diff, then
+`set_task_technologies({ id, technologies: ["frontend", "backend", …] })`. Until you do,
+`proofExpectation.declared` is `false` and the move is refused for a reason that names the
+missing declaration — that refusal is how the discovery gets done. Every technology you
+declare then demands a proof of **its** nature.
+
+A ticket typed `docs` elects `documentation` whatever the repository produces: what it ships
+is the document, and what proves it is the document's content.
 
 ## Test plan (strongly recommended once work is done)
 
@@ -126,8 +157,10 @@ Describe how to test the task or request so a human can follow, replay and valid
 - `add_test_step` once per ordered step: `targetType` (`task` | `request`), `targetId`,
   `instruction`, optional `expectedResult`, `position` for ordering, and `authorType: llm`.
   A human later moves each step's `status` `pending → passed | failed | skipped`.
-- Attach proof as `media` (`{ kind: image | video, url, caption? }`). Host the media first
-  (see below) so the `url` is one a browser can load.
+- Attach proof as `media`. What is **looked at** lives behind a URL —
+  `{ kind: image | video, url, caption? }`, hosted per the section below so a browser can
+  load it. What is **read** is its own text: `{ kind: "text", content, caption? }` carries a
+  cURL response, an LLM answer or a rendered document, and nothing is hosted for it.
 - `list_test_steps` (`targetType` + `targetId`) reads the current plan;
   `update_test_step` (by `id`) edits a step — passing `media` **replaces** its whole set;
   `remove_test_step` (by `id`) drops a step and its media.
