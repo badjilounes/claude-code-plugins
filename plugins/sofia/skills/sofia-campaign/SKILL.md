@@ -13,17 +13,25 @@ The `sofia` MCP tools are provided by this plugin — you do not need to add an 
 
 ## Always start with discovery
 
-Call `get_sofia_capabilities` first. It returns, from the Sofia backend, the supported
-platforms, the available mission templates, and the valid control levels and tones. Use
-those exact values — never guess a platform name, tone or control level.
+Call `get_sofia_capabilities` first. It returns the supported platforms and mission
+templates served by the Sofia backend, plus the control levels and tones its domain
+accepts. Use those exact values — never guess a platform name, tone or control level, and
+never carry over a value you saw in an older conversation.
 
 Then `list_connected_accounts` to know which platforms the user can actually post to and
 each account's `socialAccountId`.
 
 ## Running an AI campaign (mission)
 
-1. `create_mission` with an `objective` (natural language), a `tone`, and a `controlLevel`
-   (`manual` keeps a human in the loop; `full_auto` lets Sofia run).
+1. `create_mission` with an `objective` (natural language), a `tone`, and a `controlLevel`.
+   There are exactly two control levels:
+   - **`manual`** — a human stays in the loop. The plan waits for `accept_mission_plan`,
+     and each publication is validated before it is scheduled.
+   - **`auto`** — no validation. The plan activates on its own, and publications that are
+     complete are scheduled straight away.
+
+   Prefer `manual` unless the user has explicitly asked Sofia to run unattended: under
+   `auto`, posts reach the user's real audience with no further confirmation.
 2. The plan is generated asynchronously — poll `get_mission` until a plan appears with a
    proposed status.
 3. Present the plan to the user. On approval call `accept_mission_plan`; otherwise
@@ -39,4 +47,5 @@ For a one-off post, `create_publication` with one `platformPublications` entry p
 
 - The acting identity is the account configured in the plugin's environment — every action
   is on that user's behalf.
+- `publish_publication` is irreversible and public. Confirm with the user before calling it.
 - X and LinkedIn have no native scheduling; Sofia handles timing server-side.
