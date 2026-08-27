@@ -47,7 +47,5 @@ For a one-off post, `create_publication` with one `platformPublications` entry p
 
 - The acting identity is the account configured in the plugin's environment — every action
   is on that user's behalf.
-- `publish_publication` is irreversible and public. Confirm with the user before calling it,
-  and check `get_sofia_capabilities` first: a network Sofia can address in code is not
-  necessarily one it is authorised to publish on.
+- `publish_publication` is irreversible and public. Confirm with the user before calling it.
 - X and LinkedIn have no native scheduling; Sofia handles timing server-side.
