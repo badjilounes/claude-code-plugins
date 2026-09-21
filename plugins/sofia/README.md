@@ -28,7 +28,7 @@ permissions it wants. Sofia asks for them **one at a time**, as they become nece
 | Scope | What it opens |
 | --- | --- |
 | `read` | profile, connected accounts, media library, publications, campaigns |
-| `write` | create and modify posts, campaigns and media — nothing is sent to a network |
+| `write` | create and modify posts, campaigns and media, and hand you a link to connect a missing network — nothing is sent to a network |
 | `publish` | send a post, schedule one, accept a campaign plan |
 | `stats` | reach, engagement, per-post metrics, comments |
 
@@ -57,6 +57,9 @@ Leave one, and the connector loses it at the same moment you do.
 
 **Discovery** — `get_sofia_capabilities`, `get_supported_platforms`, `get_publishing_options`,
 `list_establishments`, `get_establishment`, `list_connected_accounts`, `get_sofia_profile`
+
+**Accounts** — `connect_social_account`: a link to Sofia where you authorize a missing network in
+your browser. The network's authorization never goes through the conversation.
 
 **Media** — `search_media`, `get_media`, `upload_media`
 
