@@ -33,7 +33,7 @@
     {
       "name": "sofia",
       "displayName": "Sofia",
-      "description": "Drive Sofia — the multi-channel AI social-publishing platform — from Claude Code.\n\nDiscover what Sofia can do, create AI-driven campaigns (missions), validate or reject the proposed plan, and create and publish posts across Instagram, X, LinkedIn, TikTok and Facebook.\n\nBundles the Sofia MCP server (local stdio) and a campaign skill.\n\nDeveloped by @badjilounes.",
+      "description": "Drive Sofia — the multi-channel AI social-publishing platform — from Claude Code.\n\nConnects by consent: one URL, no key to paste, no password in a config file. Read your establishment's profile and statistics, reuse or upload media, write and publish posts across Instagram, X, LinkedIn, TikTok and Facebook, and propose a campaign plan Sofia will judge before holding it.\n\nPermissions are asked one at a time — reading first, publishing only when you ask for it — and revoked from Sofia in one click.\n\nDeveloped by @badjilounes.",
       "author": {
         "name": "Sofia",
         "email": "support@sofia-post.com"
@@ -46,6 +46,7 @@
         "social-media",
         "publishing",
         "campaigns",
+        "oauth",
         "ai"
       ],
       "source": "./plugins/sofia",

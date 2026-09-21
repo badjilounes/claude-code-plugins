@@ -1,51 +1,56 @@
 ---
 name: sofia-campaign
 description: >-
-  Create and publish social-media campaigns with Sofia from Claude Code. Use when asked to
-  create a campaign or mission, draft or schedule posts, or publish to Instagram / X /
-  LinkedIn / TikTok / Facebook via Sofia. Drives the Sofia MCP tools: discover capabilities,
-  create a mission, validate the AI-proposed plan, then create and publish publications.
+  Run a Sofia campaign — a series of posts around one objective. Use when asked to plan a
+  campaign, propose a schedule of posts, or accept or reject a plan Sofia proposed. Drives the
+  Sofia MCP campaign tools.
 ---
 
-# Sofia campaigns
+# Campaigns with Sofia
 
-The `sofia` MCP tools are provided by this plugin — you do not need to add an MCP server.
+A campaign is one objective and a plan of publications. Two ways in, and the difference matters to
+the user.
 
-## Always start with discovery
+## Before either: know the ground
 
-Call `get_sofia_capabilities` first. It returns the supported platforms and mission
-templates served by the Sofia backend, plus the control levels and tones its domain
-accepts. Use those exact values — never guess a platform name, tone or control level, and
-never carry over a value you saw in an older conversation.
+1. `get_sofia_profile` — the establishment, its connected accounts, its campaign preferences.
+2. `get_sofia_capabilities` — templates, tones, narrative phases, formats per platform. Use those
+   **exact** values; never invent a tone or a phase name.
+3. `list_connected_accounts` — you cannot plan a post on a platform that is not connected with
+   publishing permission.
 
-Then `list_connected_accounts` to know which platforms the user can actually post to and
-each account's `socialAccountId`.
+## Mode A — you write the plan, Sofia judges it
 
-## Running an AI campaign (mission)
+`create_campaign { objective, tone, name?, context?, plan? }`, or `propose_campaign_plan` on an
+existing campaign.
 
-1. `create_mission` with an `objective` (natural language), a `tone`, and a `controlLevel`.
-   There are exactly two control levels:
-   - **`manual`** — a human stays in the loop. The plan waits for `accept_mission_plan`,
-     and each publication is validated before it is scheduled.
-   - **`auto`** — no validation. The plan activates on its own, and publications that are
-     complete are scheduled straight away.
+Sofia validates the plan before holding it, and refuses it whole with a named reason rather than
+keeping half: a window that ends before it starts, a platform outside the campaign's channels, a
+channel that is not connected, a date outside the window, a format the platform does not serve, a
+caption too long. Fix and resubmit — do not strip the offending post silently, the user asked for
+it.
 
-   Prefer `manual` unless the user has explicitly asked Sofia to run unattended: under
-   `auto`, posts reach the user's real audience with no further confirmation.
-2. The plan is generated asynchronously — poll `get_mission` until a plan appears with a
-   proposed status.
-3. Present the plan to the user. On approval call `accept_mission_plan`; otherwise
-   `reject_mission_plan` with a reason to steer the regenerated plan.
+`attach_campaign_media` adds a media to a planned publication; `remove_planned_publication` takes
+one out.
 
-## Posting directly
+## Mode B — Sofia writes the plan
 
-For a one-off post, `create_publication` with one `platformPublications` entry per target
-(each needs a `platform` and a `socialAccountId` from `list_connected_accounts`), then
-`publish_publication`.
+`create_campaign` **without** `plan`. Sofia's planner proposes one; poll `get_campaign` until a
+plan appears with a proposed status. Present it, then `accept_campaign_plan` or
+`reject_campaign_plan` with a reason — the reason steers what gets regenerated, so a vague one
+wastes a round.
 
-## Notes
+## The control level is not yours
 
-- The acting identity is the account configured in the plugin's environment — every action
-  is on that user's behalf.
-- `publish_publication` is irreversible and public. Confirm with the user before calling it.
-- X and LinkedIn have no native scheduling; Sofia handles timing server-side.
+Sofia decides whether a campaign runs with a human in the loop or on its own, from the **account's
+preference**, set in Sofia. There is no `controlLevel` argument on any tool, and the API refuses
+the field outright when it comes from a connector.
+
+This is deliberate, and worth saying to a user who asks for "fully automatic": an external agent
+that could set that field would be granting itself permission to bypass the person it acts for. If
+they want it, they change it in Sofia — one screen, thirty seconds, and it is their decision.
+
+**When that preference is `auto`, creating a campaign requires the `publish` scope**, even without
+a plan: Sofia will accept the plan and schedule the posts by itself, and that is publishing by
+ricochet. A refusal here reads `insufficient_scope` — relay it, ask the user to re-authorize.
+Accepting a plan (`accept_campaign_plan`) always requires `publish`.
