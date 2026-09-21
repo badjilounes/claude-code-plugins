@@ -15,7 +15,7 @@ consent screen, you approve in your browser, and that is the whole setup.
 **No key to paste. No password in a config file.** The plugin's entire configuration is one URL:
 
 ```json
-{ "mcpServers": { "sofia": { "type": "http", "url": "https://mcp.sofia-post.com/mcp" } } }
+{ "mcpServers": { "sofia": { "type": "http", "url": "https://mcp.sofia-post.com" } } }
 ```
 
 Any valid Sofia account works. There is no waiting list.
@@ -86,11 +86,12 @@ your browser. The network's authorization never goes through the conversation.
 ## Elsewhere than Claude Code
 
 The same server works with any MCP client that speaks OAuth. The URL is always
-`https://mcp.sofia-post.com/mcp`.
+`https://mcp.sofia-post.com` — the bare domain, nothing to append. The former address,
+`https://mcp.sofia-post.com/mcp`, keeps working for connections that already use it.
 
 | Client | How |
 | --- | --- |
-| Claude Code | this plugin, or `claude mcp add --transport http sofia https://mcp.sofia-post.com/mcp` |
+| Claude Code | this plugin, or `claude mcp add --transport http sofia https://mcp.sofia-post.com` |
 | claude.ai | Settings → Connectors → Add custom connector, paste the URL |
 | Cursor | add an MCP server of type `http` with that URL |
 | ChatGPT | developer mode → add a connector |

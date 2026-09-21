@@ -2,7 +2,7 @@
   "mcpServers": {
     "sofia": {
       "type": "http",
-      "url": "https://mcp.sofia-post.com/mcp"
+      "url": "https://mcp.sofia-post.com"
     }
   }
 }
