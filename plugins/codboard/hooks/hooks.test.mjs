@@ -266,6 +266,52 @@ scenario('a due merge left undone blocks the Stop', () => {
   check('an unread policy never blocks', !blocked(stop()), reason(stop()));
 });
 
+scenario('sync_milestone: one call settles every milestone it recorded', () => {
+  setup('claude/grouped');
+  start();
+  edit();
+  bash('git push -u origin claude/grouped');
+  gh('create_pull_request', { owner: 'o', repo: 'r' }, { number: 7, html_url: 'https://x/7' });
+  cb('sync_milestone', { projectId: 'p', request: { title: 't' }, tasks: [{ title: 't' }], startExecution: {} }, {
+    content: [{ type: 'text', text: JSON.stringify({ ok: true, done: ['create_request', 'create_task', 'start_execution'] }) }],
+  });
+  check('run opened through the grouped call', state().executionOpen === true, JSON.stringify(state()));
+  cb('sync_milestone', { taskId: 't', branch: { name: 'claude/grouped', url: 'u' }, pullRequest: { url: 'https://x/7', status: 'open' } }, {
+    ok: true,
+    done: ['set_task_branch', 'set_task_pull_request'],
+  });
+  check('Stop passes once the grouped call mirrored branch and PR', !blocked(stop()), reason(stop()));
+});
+
+scenario('sync_milestone: a refused step settles nothing', () => {
+  setup('claude/refused');
+  start();
+  edit();
+  cb('get_workflow', {}, { statuses: [{ key: 'done', terminal: true }] });
+  cb('sync_milestone', { executionId: 'e1', branch: { name: 'claude/refused', url: 'u' }, status: { to: 'done' } }, {
+    ok: false,
+    done: [],
+    failed: { step: 'set_task_branch', error: 'nope' },
+    skipped: ['change_task_status'],
+  });
+  const r = stop();
+  check('Stop still BLOCKS on the branch', blocked(r) && reason(r).includes('never mirrored'), reason(r));
+  check('  and a skipped finish does not stale the report', state().finished !== true, JSON.stringify(state()));
+});
+
+scenario('sync_milestone: a finish and a failed barrier are read from its arguments', () => {
+  setup('main');
+  start();
+  cb('get_project', {}, { project: { reportingCadence: 'on_task_finished', reportPrompt: 'x' } });
+  const out = cb('sync_milestone', { taskId: 't', executionId: 'e1', activities: [{ type: 'tests_failed', summary: 'red' }], status: { to: 'done' }, note: { kind: 'finished', summary: 's' }, completeExecution: {} }, {
+    ok: true,
+    done: ['log_activity', 'change_task_status', 'record_work_note', 'complete_execution'],
+  });
+  check('a failed barrier logged in the call settles the merge gate', state().mergeSettled === true);
+  check('the finish stales the report', state().reportStale === true);
+  check('the status change reminds the remote mirrors', JSON.stringify(out || {}).includes('ADR 0044'));
+});
+
 scenario('untracked repo stays inert', () => {
   setup('claude/x', { tracked: false });
   check('post-bash silent', bash('git push -u origin claude/x') === undefined);

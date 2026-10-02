@@ -4,7 +4,8 @@
 //      list_repositories (ADR 0069) — so the Stop and merge hooks can enforce
 //      it without ever calling the API.
 //   2. Record which milestones/obligations have been satisfied as the matching
-//      codboard tools fire (run opened, branch, PR, report, finish).
+//      codboard tools fire (run opened, branch, PR, report, finish) — on their
+//      own, or grouped in one sync_milestone call.
 // Matched broadly on the tool-name suffix so it is robust to the MCP namespace
 // prefix (mcp__codboard__, mcp__plugin_codboard_codboard__, ...).
 import {
@@ -90,7 +91,13 @@ const READERS = {
 // Tools that can only be called with an executionId (or that return one) prove
 // a run exists for this session's work — which is what the Stop existence gate
 // is asking for.
-const OPENS_RUN = new Set(['start_execution', 'log_activity', 'attach_commit', 'complete_execution']);
+const OPENS_RUN = new Set([
+  'start_execution',
+  'log_activity',
+  'attach_commit',
+  'complete_execution',
+  'run_referenced',
+]);
 
 function applyMilestone(state, input, suffix) {
   const cadence = (state.policy && state.policy.reportingCadence) || 'on_task_finished';
@@ -134,6 +141,48 @@ function applyMergeOutcome(state, input, suffix) {
   if (settledBy[suffix] && settledBy[suffix]()) markMergeSettled(state);
 }
 
+// sync_milestone (one call per milestone) runs several of the tools above in a
+// fixed order and answers which ones went through (`done`). Each one is replayed
+// as if it had been called on its own, with the arguments it was given — and
+// only those, so a step the server refused never settles a gate.
+const IS_MILESTONE_RESULT = (c) => Array.isArray(c.done);
+
+const MILESTONE_STEP_ARGS = {
+  set_task_pull_request: (args) => ({ pullRequestStatus: args.pullRequest && args.pullRequest.status }),
+  change_task_status: (args) => ({ toStatus: args.status && args.status.to }),
+  record_work_note: (args) => ({ kind: args.note && args.note.kind }),
+};
+
+function milestoneSteps(input) {
+  const result = pick(extractPayloads(input), IS_MILESTONE_RESULT);
+  if (!result) return [];
+  const args = input.tool_input || {};
+  const steps = result.done.map((suffix) => ({
+    suffix,
+    stepInput: { tool_input: (MILESTONE_STEP_ARGS[suffix] || (() => ({})))(args) },
+  }));
+  // A milestone recorded against a run you name proves that run exists, just
+  // as a log_activity on it would.
+  if (args.executionId && steps.length > 0) steps.unshift({ suffix: 'run_referenced', stepInput: {} });
+  if (!result.done.includes('log_activity')) return steps;
+  return [
+    ...steps,
+    ...(args.activities || []).map((activity) => ({
+      suffix: 'log_activity',
+      stepInput: { tool_input: { type: activity && activity.type } },
+    })),
+  ];
+}
+
+function applySteps(state, steps) {
+  for (const { suffix, stepInput } of steps) {
+    applyMilestone(state, stepInput, suffix);
+    applyMergeOutcome(state, stepInput, suffix);
+  }
+}
+
+const STATUS_CHANGED = new Set(['change_task_status', 'change_request_status']);
+
 function main() {
   const input = readStdin();
   if (!readConfig(input)) emit(undefined); // not a CodBoard repo
@@ -149,15 +198,15 @@ function main() {
     emit(undefined);
   }
 
-  applyMilestone(state, input, suffix);
-  applyMergeOutcome(state, input, suffix);
+  const steps = suffix === 'sync_milestone' ? milestoneSteps(input) : [{ suffix, stepInput: input }];
+  applySteps(state, steps);
   writeState(input, state);
 
   // D1 (ADR 0044): a status change makes CodBoard's read-only remote mirrors
   // (the ticket status and the PR state) stale. The hook never reads the remote
   // nor calls the API — it reminds the agent, which IS connected, to redeclare
   // them so the badges stay fresh. CodBoard never reads the board/forge itself.
-  if (suffix === 'change_task_status' || suffix === 'change_request_status') {
+  if (steps.some((step) => STATUS_CHANGED.has(step.suffix))) {
     emit({
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
