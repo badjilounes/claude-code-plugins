@@ -190,9 +190,9 @@ export function markWork(state) {
 // --- nudges ----------------------------------------------------------------
 
 const MILESTONE_NUDGE = {
-  work: 'this session is changing code with no run open — `create_request` + `create_task` + `start_execution` now, so the work lands on the board as it happens instead of being reconstructed afterwards',
-  branch: 'the branch is not yet on CodBoard — call `set_task_branch` and move the task to in_progress',
-  pr: 'the PR is not yet on CodBoard — call `set_task_pull_request` (it lands on the execution timeline on its own)',
+  work: 'this session is changing code with no run open — pick the ticket up now in ONE `sync_milestone` call (projectId + request + acceptanceCriteria + tasks + startExecution), so the work lands on the board as it happens instead of being reconstructed afterwards',
+  branch: 'the branch is not yet on CodBoard — one `sync_milestone` call with taskId + branch + status (in_progress) + note (started)',
+  pr: 'the PR is not yet on CodBoard — one `sync_milestone` call with taskId + executionId + pullRequest (+ the test steps and verdicts you already have)',
 };
 
 // One nudge per milestone per session: repeating it every turn trains the model

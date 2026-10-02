@@ -50,7 +50,11 @@ assuming a fixed shape. When you work a specific task, resolve its workflow with
 
 While you have active tasks on this project:
 
-- **Pick up / decompose / drive tasks** → skill **codboard-task**.
+- **Pick up / decompose / drive tasks** → skill **codboard-task** — one `sync_milestone` call
+  per milestone (ticket picked up, branch, PR, done), and no CodBoard call in between.
+
+Read the three configuration areas **once** per session and reuse them; do not re-read them
+before every move.
 - **Watch comments & apply auto-merge** → skill **codboard-watch**.
 - **Keep the day's report fresh** → skill **codboard-report**.
 

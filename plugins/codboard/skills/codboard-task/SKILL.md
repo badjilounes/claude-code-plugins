@@ -1,9 +1,9 @@
 ---
 name: codboard-task
 description: >-
-  Drive a CodBoard task's lifecycle: turn a ticket into a request, decompose it into tasks,
-  start and finish work, attach a test plan with media captures, and keep status, branch,
-  PR and presence up to date. Use when picking up a ticket, starting or finishing a task,
+  Drive a CodBoard task's lifecycle in one `sync_milestone` call per milestone: pick up a
+  ticket (request, acceptance criteria, tasks, run), then declare branch, PR, test plan with
+  captures, verdicts, status and finish — syncing at milestones only, never in between. Use when picking up a ticket, starting or finishing a task,
   writing a test plan, or when asked to work a CodBoard item. Applies the statuses, transitions
   and playbook loaded by the codboard-workflow skill.
 ---
@@ -37,48 +37,101 @@ The policy lives in `autoRun` on the project (`get_project`) (`mode` off | on_de
 eligible, `leaseMinutes`, `maxConcurrent`, `statuses`) — read it, never assume it. CodBoard
 never starts you: you ask, it answers.
 
-## Turn a ticket into work
+## Sync at milestones — one `sync_milestone` call each
 
-1. For every ticket you pick up, `create_request` and set its `type` (e.g. `bug` / `feature`).
-2. State what the work will have to prove **before** decomposing it: `add_acceptance_criterion`
-   ({ requestId, given?, when?, then }) once per criterion. Each gets a stable handle (`AC1`,
-   `AC2`, …) that is never reused, so a criterion can be cited in a PR, a test step or a report
-   and still mean the same thing later. `list_acceptance_criteria` reads them back.
-3. Break it into tasks per the playbook (by context / layer). `create_task` per unit of work.
+CodBoard is a record of **milestones**, not a running commentary. Every milestone below is
+**one** `sync_milestone` call, made the moment it happens; between milestones you make **no**
+CodBoard call. Each field you pass runs through the same API command as its single-purpose tool
+(same guards, same audit), in a fixed order that puts proofs **before** the status move they
+unlock: request → acceptance criteria → tasks → run → technologies → branch → PR → activities →
+test steps → criterion verdicts → status → work note → complete the run.
 
-## Start a task
+`actorType` defaults to `llm`. `taskId` defaults to the first task the call created and
+`executionId` to the run it opened, so the pick-up call needs neither.
 
-4. `start_execution` ({ requestId, changedByType: `llm`, `agentClient`, `agentModel`,
-   `agentMode` }) — this opens **your run** and returns an `executionId`. Keep it for the whole
-   ticket: presence, activity and artifacts all hang off it. See **Declare your run** below for
-   what it buys you.
-5. Move it to the workflow's in-progress status (`change_task_status`). Check the move first
-   with `get_transition_policy` if it may need proofs or human approval — see **Governed
-   transitions** below.
-6. `set_task_branch` — branch `{type}/{slug}` per the playbook.
-7. `record_work_note` with kind `started` and a one-line summary.
+### 1. Ticket picked up
 
-## Declare your run
+```
+sync_milestone({
+  projectId,
+  request: { title, type: "bug" | "feature" | …, externalUrl?, description?, priority? },
+  acceptanceCriteria: [{ given?, when?, then }, …],   // BEFORE decomposing — what the work must prove
+  tasks: [{ title, repositoryId?, … }, …],            // per the playbook (by context / layer)
+  startExecution: { agentClient, agentModel, agentMode }
+})
+```
 
-CodBoard already records the **milestones** your task lifecycle declares: `set_task_branch` and
-`set_task_pull_request` become branch / pull-request proofs on their own — you never re-attach
-them by hand. What only you can report is **what happened in between**, so log it as you go on
-the `executionId` from step 4:
+Keep what it returns for the whole session: `requestId`, `criteria` (`id` + stable handle `AC1`,
+`AC2`, … — never reused, so a criterion can be cited in a PR, a test step or a report),
+`tasks` (`id` each) and `executionId` (your run: presence, activity and artifacts hang off it).
+Picking up an existing request? Pass `requestId` instead of `request`.
 
-- `log_activity({ executionId, taskId, type, summary })` — `analysis_started`,
-  `files_changed`, `command_executed`, `tests_started`, `tests_passed`, `tests_failed`,
-  `review_requested`, `note`, `error`. One line each, at the moment it happens.
-- `attach_commit({ executionId, taskId, sha, url })` for a commit worth citing.
-- `complete_execution({ executionId })` when the work lands, `fail_execution({ executionId,
-  summary })` when you give up — a run left open reads as still running forever.
+### 2. Branch created — the task starts
 
-Say only what you did. An event you did not observe is not evidence.
+```
+sync_milestone({
+  taskId, branch: { name, url },                      // `{type}/{slug}` per the playbook
+  technologies?: ["frontend", "backend", …],          // mandatory on a `monorepo` repository
+  status: { to: "<in-progress status>" },
+  note: { kind: "started", summary: "<one line>" }
+})
+```
+
+### 3. PR opened — the task goes to review
+
+Write the test plan and produce the capture **before** this call (see below), so they ride it:
+
+```
+sync_milestone({
+  taskId, executionId,
+  pullRequest: { url, status: "open" },               // its body already carries the backlink
+  activities: [{ type: "tests_passed", summary: "nx affected -t lint test build" }],
+  testSteps: [{ instruction, expectedResult?, status?, criterionKeys?: ["AC1"], media? }, …],
+  criterionVerdicts: [{ criterionId, status: "verified" | "failed" | "waived", waivedReason? }],
+  status: { to: "<in-review status>" }
+})
+```
+
+### 4. Done — merged (or abandoned)
+
+```
+sync_milestone({
+  taskId, executionId,
+  pullRequest: { url, status: "merged" },
+  status: { to: "<terminal status>" },
+  note: { kind: "finished", summary: "<one line>" },
+  completeExecution: { summary? }                    // last task of the run only
+})
+```
+
+Then refresh the report per cadence → skill **codboard-report**. Giving up instead:
+`fail_execution({ executionId, summary })` — a run left open reads as still running forever.
+
+### When a step is refused
+
+The first failing step stops the call. The answer says what is `done` (it is recorded — **do
+not** resend it), the `failed` step with the server's reason, and what was `skipped`. Fix the
+cause (`get_transition_policy` names what a move lacks) and resend **only** the remaining fields.
+
+### What happens between milestones
+
+Nothing, on CodBoard. Branch and PR become proofs on the run on their own; what only you can
+report — the test outcome, a notable command, an error — rides the **next** milestone as
+`activities` (`analysis_started`, `files_changed`, `command_executed`, `tests_started`,
+`tests_passed`, `tests_failed`, `commit_created`, `review_requested`, `note`, `error`). Say only
+what you did: an event you did not observe is not evidence.
+
+The single-purpose tools (`set_task_branch`, `change_task_status`, `add_test_step`,
+`update_acceptance_criterion`, `log_activity`, …) remain for corrections and for what the
+grouped call does not cover — `attach_commit`, `fail_execution`, directives, media upload.
 
 ## Governed transitions
 
-Before a `change_task_status`, call **`get_transition_policy({ id, toStatus, reason? })`**:
-it changes nothing and returns `missing` (everything the move still lacks) and `wouldBlock`.
-The server refuses a move whose policy is not met, so satisfy what it lists first:
+Before a move that carries proofs or a human actor (read once from `get_workflow`), call
+**`get_transition_policy({ id, toStatus, reason? })`**: it changes nothing and returns `missing`
+(everything the move still lacks) and `wouldBlock`. An unguarded move needs no dry-run — and a
+refused `status` inside `sync_milestone` already names what is missing. The server refuses a
+move whose policy is not met, so satisfy what it lists first:
 
 - **Proofs** (`policy.proofs`) — attach the branch, open the PR, make tests green and/or settle
   the request's acceptance criteria before the move. Under a `strict` transition a missing proof
@@ -92,33 +145,12 @@ The server refuses a move whose policy is not met, so satisfy what it lists firs
 - **Agent-only** (`actor: agent_only`) — the mirror case: a human is refused on that edge, you
   are not. Cross it as usual.
 
-## Presence — declare that you are working
+## Presence — optional
 
-While actively working a task, make yourself visible so CodBoard can show you online:
-
-8. `start_session` (the `executionId` from step 4 + taskId) once when you begin.
-9. `heartbeat_task` (taskId) periodically (~every 30s).
-10. `end_session` (taskId) when you stop.
-
-If you stop pinging, the task shows stale, then offline, on its own.
-
-## Finish a task
-
-11. Open the PR and `set_task_pull_request` — that alone puts the pull request on the run's
-    timeline; there is nothing else to attach.
-12. Move to the in-review / terminal status, respecting transitions
-    (`in_progress → in_review` needs a `change_request` artifact) **and their execution
-    policy** (proofs / human approval — see **Governed transitions**).
-13. Settle every acceptance criterion of the request — `update_acceptance_criterion` with
-    `verified` only when a proof backs it, `failed` when you proved it does not hold, `waived`
-    with a reason when it was dropped. Never leave one `pending`: that is what
-    `policy.proofs.acceptanceCriteria` checks, and it is the honest record of what the work
-    actually proved.
-14. `record_work_note` with kind `finished`.
-15. Attach a **test plan** so a human can replay and validate, with a proof of the nature
-    the technology demands → see below.
-16. `complete_execution` (or `fail_execution`) to close your run.
-17. Then refresh the report per cadence → skill **codboard-report**.
+`start_session` / `heartbeat_task` / `end_session` show you online on a task. They cost one
+call each, every ping: use them only when a human is watching the task live or when you hold a
+lease from `claim_next_task` you must keep fresh — and then ping at milestones, not on a timer.
+A task you stop pinging shows stale, then offline, on its own.
 
 ## Prove what the technology demands
 
@@ -154,9 +186,10 @@ is the document, and what proves it is the document's content.
 
 Describe how to test the task or request so a human can follow, replay and validate it.
 
-- `add_test_step` once per ordered step: `targetType` (`task` | `request`), `targetId`,
-  `instruction`, optional `expectedResult`, `position` for ordering, and `authorType: llm`.
-  A human later moves each step's `status` `pending → passed | failed | skipped`.
+- Send the steps in the PR-opened milestone's `testSteps` (ordered as listed, targeted at the
+  task): `instruction`, optional `expectedResult`, `criterionKeys` it covers, `status`, `media`.
+  A human later moves each step's `status` `pending → passed | failed | skipped`. A plan on the
+  **request** rather than a task is the one case for `add_test_step` (`targetType: request`).
 - Attach proof as `media`. What is **looked at** lives behind a URL —
   `{ kind: image | video, url, caption? }`, hosted per the section below so a browser can
   load it. What is **read** is its own text: `{ kind: "text", content, caption? }` carries a

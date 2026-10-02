@@ -24,7 +24,7 @@ function existenceIssue(state) {
   if (!work || !work.seen || state.executionOpen === true) return undefined;
   return (
     'Existence: this session changed code but no CodBoard run covers it — ' +
-    '`create_request` (+ `add_acceptance_criterion`), `create_task`, then `start_execution`. ' +
+    'one `sync_milestone` call with projectId + request + acceptanceCriteria + tasks + startExecution. ' +
     'Work that is not on the board did not happen, as far as the audit trail is concerned.'
   );
 }
@@ -49,8 +49,8 @@ function mergeIssue(state, input) {
   return (
     `Automation: a PR${d} is open and this repository's \`autoMergeMode\` is \`${mode}\` — that mode IS the ` +
     'standing authorization, so the merge is not the user\'s to confirm. Satisfy its barrier and merge, then ' +
-    'declare it (`set_task_pull_request({ pullRequestStatus: "merged" })`). If the barrier does NOT hold, say ' +
-    'so instead — `log_activity` (tests_failed/error) or move the task to a blocked status. Ending the turn ' +
+    'declare it (`sync_milestone` with pullRequest { status: "merged" }, status and completeExecution). If the ' +
+    'barrier does NOT hold, say so instead — `sync_milestone` with activities [tests_failed/error] or a blocked status. Ending the turn ' +
     'on "the check is green, but I\'ll leave the merge to you" is exactly what this gate refuses.'
   );
 }
@@ -65,11 +65,11 @@ function collect(state, input) {
 
   if (pending.branch && pending.branch.seen && !pending.branch.synced) {
     const d = pending.branch.detail ? ` (${pending.branch.detail})` : '';
-    issues.push(`Workflow: a branch${d} was created or pushed but never mirrored — call \`set_task_branch\` and move the task to in_progress.`);
+    issues.push(`Workflow: a branch${d} was created or pushed but never mirrored — one \`sync_milestone\` call with taskId + branch + status (in_progress).`);
   }
   if (pending.pr && pending.pr.seen && !pending.pr.synced) {
     const d = pending.pr.detail ? ` (${pending.pr.detail})` : '';
-    issues.push(`Workflow: a PR${d} was opened but never mirrored — call \`set_task_pull_request\`.`);
+    issues.push(`Workflow: a PR${d} was opened but never mirrored — one \`sync_milestone\` call with taskId + pullRequest.`);
   }
 
   const merge = mergeIssue(state, input);

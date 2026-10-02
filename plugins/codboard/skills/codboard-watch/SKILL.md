@@ -10,7 +10,7 @@ description: >-
 # CodBoard — watch loop
 
 Loop while you have active tasks; follow `watch.pollHint` (from `get_project`)
-for cadence. Each poll drains **two inboxes** — comments (free-form) and directives
+for cadence — a poll is two reads, and a poll that finds nothing writes nothing. Each poll drains **two inboxes** — comments (free-form) and directives
 (structured) — then applies the **standing policy** (config). CodBoard records intentions and
 your declarations; **it never touches the forge** — you execute (ADR 0007/0010).
 
@@ -26,13 +26,13 @@ Call `list_pending_directives(projectId)` each poll. A directive is a recorded i
 execute, then resolve:
 
 - **`create_pr`** on a task — open the PR yourself (e.g. `gh pr create`, base = the
-  repository main branch), declare it with
-  `set_task_pull_request({ pullRequestUrl, pullRequestStatus: "open" })` + attach a
-  `change_request` artifact, then `resolve_task_directive(id)`.
+  repository main branch), declare it with one
+  `sync_milestone({ taskId, executionId, pullRequest: { url, status: "open" }, … })` (the PR
+  becomes the `change_request` proof on its own), then `resolve_task_directive(id)`.
 - **`merge_pr`** (only ever recorded when the PR is open) — verify CI exactly as
-  the repository `autoMergeMode` requires (see below), `gh pr merge`, declare
-  `set_task_pull_request({ pullRequestStatus: "merged" })`, move the task to the terminal
-  status, then `resolve_task_directive(id)`. Attach the same `ci` evidence as an auto-merge.
+  the repository `autoMergeMode` requires (see below), `gh pr merge`, declare it with
+  one `sync_milestone({ taskId, executionId, pullRequest: { url, status: "merged" }, status:
+  { to: "<terminal>" } })`, then `resolve_task_directive(id)`. Attach the same `ci` evidence as an auto-merge.
 - **`approve_transition`** — a governed transition awaiting **human** approval (you proposed
   it). Do **not** resolve it yourself — a human decides. Skip it in the drain loop and keep
   polling; once a human resolves it, retry the `change_task_status` it gates.
@@ -77,6 +77,7 @@ move the task to the workflow's terminal status; CodBoard records the merge.
 This is enforced, not merely written: the `Stop` hook **blocks the end of the turn** while a PR
 you opened sits on a repository whose mode is not `none` and the session has neither merged it
 nor accounted for it. Two outcomes settle the gate — the merge (declared with
-`set_task_pull_request({ pullRequestStatus: "merged" })`), or an honest report of a barrier that
-did not hold (`log_activity` with `tests_failed`/`error`, or the task moved to a blocked status).
+`sync_milestone` — `pullRequest: { status: "merged" }`), or an honest report of a barrier that
+did not hold (`activities: [{ type: "tests_failed" | "error" }]`, or a blocked `status`, in the
+same call).
 Handing the merge back to the user is not one of them.
