@@ -16,6 +16,7 @@ export type PageSubject = { name: string; scenarios: PageScenario[] }
 
 export type PageTicket = {
   id: string
+  tracker: string
   url: string
   summary: string
   context: string
@@ -145,7 +146,7 @@ function nav(ticket: PageTicket, links: PageLinks, current: string): string {
     current !== 'ticket' && links.ticket !== '' ? chip(`${ticket.id} — Ticket`, links.ticket, 'ticket') : '',
     current !== 'rules' && links.rules !== '' ? chip(`${ticket.id} — Règles`, links.rules, 'rule') : '',
     current !== 'proofs' && links.proofs !== '' ? chip(`${ticket.id} — Preuves`, links.proofs, 'image') : '',
-    chip('YouTrack', ticket.url, 'external'),
+    chip(ticket.tracker, ticket.url, 'external'),
   ]
 
   return `<div class="row">${items.filter(Boolean).join('')}</div>`
@@ -183,7 +184,7 @@ export function rulesPage(ticket: PageTicket, feature: string, subjects: PageSub
               return `<li><b>${esc(keyword)}</b>${esc(step.slice(keyword.length).trim())}</li>`
             })
             .join('')
-          const proofs = scenario.proofs.map(proof => chip(proof.label, `${links.proofs}#proof-${proof.id}`, 'image', 'green')).join('')
+          const proofs = scenario.proofs.map(proof => chip(proof.label, `${links.proofs}#proof-${esc(proof.id)}`, 'image', 'green')).join('')
           return `<article class="card scenario${isDone ? '' : ' pending'}" id="rule-${slugId(scenario.name)}"><span class="check ${isDone ? 'done' : 'todo'}">${isDone ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' : ''}</span><h3>${esc(scenario.name)}</h3>${steps !== '' ? `<ul class="steps">${steps}</ul>` : ''}${proofs !== '' ? `<div class="row links">${proofs}</div>` : '<div class="waiting">En attente de preuve</div>'}</article>`
         })
         .join('')
@@ -209,7 +210,7 @@ export function proofsPage(ticket: PageTicket, proofs: PageProof[], links: PageL
     const previous = visuals[(at - 1 + visuals.length) % visuals.length]
     const next = visuals[(at + 1) % visuals.length]
     const media = proof.media === 'video' ? `<video src="${esc(proof.src)}" controls playsinline></video>` : `<img src="${esc(proof.src)}" alt="${esc(proof.subtitle)}">`
-    return `<div class="lightbox" id="view-${proof.id}" role="dialog" aria-label="${esc(proof.subtitle)}"><a class="close" href="#proof-${proof.id}" aria-label="Fermer">✕</a><div class="stage">${media}</div><div class="bar2"><span>${esc(proof.group)} · ${esc(proof.subtitle)}</span><span class="nav"><a href="#view-${previous?.id ?? proof.id}" aria-label="Précédente">‹</a>${at + 1} sur ${visuals.length}<a href="#view-${next?.id ?? proof.id}" aria-label="Suivante">›</a></span><span></span></div></div>`
+    return `<div class="lightbox" id="view-${esc(proof.id)}" role="dialog" aria-label="${esc(proof.subtitle)}"><a class="close" href="#proof-${esc(proof.id)}" aria-label="Fermer">✕</a><div class="stage">${media}</div><div class="bar2"><span>${esc(proof.group)} · ${esc(proof.subtitle)}</span><span class="nav"><a href="#view-${esc(previous?.id ?? proof.id)}" aria-label="Précédente">‹</a>${at + 1} sur ${visuals.length}<a href="#view-${esc(next?.id ?? proof.id)}" aria-label="Suivante">›</a></span><span></span></div></div>`
   }
   const tiles = [...groups.entries()]
     .map(([group, items]) => {
@@ -219,14 +220,14 @@ export function proofsPage(ticket: PageTicket, proofs: PageProof[], links: PageL
             proof.media === 'video'
               ? `<video src="${esc(proof.src)}" muted preload="metadata"></video><span class="play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></span>`
               : `<img src="${esc(proof.src)}" alt="${esc(proof.subtitle)}" loading="lazy">`
-          return `<article class="card tile" id="proof-${proof.id}"><a class="shot" href="#view-${proof.id}" aria-label="Agrandir ${esc(proof.subtitle)}">${media}<span class="zoom"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M11 8v6M8 11h6"/></svg></span></a><div class="meta"><strong>${esc(proof.subtitle)}</strong><div class="row">${ruleChip(proof, links)}</div></div></article>`
+          return `<article class="card tile" id="proof-${esc(proof.id)}"><a class="shot" href="#view-${esc(proof.id)}" aria-label="Agrandir ${esc(proof.subtitle)}">${media}<span class="zoom"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M11 8v6M8 11h6"/></svg></span></a><div class="meta"><strong>${esc(proof.subtitle)}</strong><div class="row">${ruleChip(proof, links)}</div></div></article>`
         })
         .join('')
       return `<section><h2>${esc(group)}<span class="count">${items.length}</span></h2><div class="grid">${cards}</div></section>`
     })
     .join('')
-  const codes = texts.length === 0 ? '' : `<section><h2>Requêtes et tests<span class="count">${texts.length}</span></h2>${texts.map(proof => `<article class="card code" id="proof-${proof.id}"><div class="head">${chip(proof.kind === 'curl' ? 'cURL' : proof.kind, `#proof-${proof.id}`, 'text', proof.kind === 'test' ? 'green' : 'clay')}<strong>${esc(proof.subtitle)}</strong><span class="file">${esc(proof.src)}</span></div><pre>${esc(proof.text)}</pre>${ruleChip(proof, links) !== '' ? `<div class="foot row">${ruleChip(proof, links)}</div>` : ''}</article>`).join('')}</section>`
-  const others = artifacts.length === 0 ? '' : `<section><h2>Artefacts<span class="count">${artifacts.length}</span></h2>${artifacts.map(proof => `<div class="row" id="proof-${proof.id}">${chip(proof.subtitle, proof.link, 'artifact')}${ruleChip(proof, links)}</div>`).join('')}</section>`
+  const codes = texts.length === 0 ? '' : `<section><h2>Requêtes et tests<span class="count">${texts.length}</span></h2>${texts.map(proof => `<article class="card code" id="proof-${esc(proof.id)}"><div class="head">${chip(proof.kind === 'curl' ? 'cURL' : proof.kind, `#proof-${esc(proof.id)}`, 'text', proof.kind === 'test' ? 'green' : 'clay')}<strong>${esc(proof.subtitle)}</strong><span class="file">${esc(proof.src)}</span></div><pre>${esc(proof.text)}</pre>${ruleChip(proof, links) !== '' ? `<div class="foot row">${ruleChip(proof, links)}</div>` : ''}</article>`).join('')}</section>`
+  const others = artifacts.length === 0 ? '' : `<section><h2>Artefacts<span class="count">${artifacts.length}</span></h2>${artifacts.map(proof => `<div class="row" id="proof-${esc(proof.id)}">${chip(proof.subtitle, proof.link, 'artifact')}${ruleChip(proof, links)}</div>`).join('')}</section>`
   const body = `<header><div class="eyebrow">${chip(ticket.id, ticket.url, 'ticket')}<span>Preuves</span></div><h1>${esc(ticket.summary || ticket.id)}</h1><p class="lede">${proofs.length} preuve${proofs.length > 1 ? 's' : ''} · ${ticket.done} sur ${ticket.total} scénarios prouvés</p>${nav(ticket, links, 'proofs')}</header>${tiles}${codes}${others}${proofs.length === 0 ? '<p class="empty">Aucune preuve pour ce ticket.</p>' : ''}${visuals.map(viewer).join('')}`
 
   return page(`${ticket.id} — Preuves`, body)

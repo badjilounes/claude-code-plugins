@@ -9,7 +9,7 @@ const BAND = {
 const YOUTRACK = { options: { tracker: 'youtrack', trackerUrl: 'https://acme.youtrack.cloud', projects: 'CORE', token: 'secret' } }
 const PANE = { surface: 'desktop', component: 'Pane', props: { title: 'x', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as const
 
-function workspace(on: On, branch: string, seed: Record<string, string>, extra: (line: string) => ReturnType<typeof RUN> | undefined = () => undefined, home?: string) {
+function workspace(on: On, branch: string, seed: Record<string, string>, extra: (line: string, stdin: string) => ReturnType<typeof RUN> | undefined = () => undefined, home?: string) {
   const files = new Map<string, string>(Object.entries(seed))
   const key = (path: string) => [...files.keys()].find(one => path.endsWith(one)) ?? path
   on('clock.now', () => ({ value: 1 }))
@@ -18,7 +18,7 @@ function workspace(on: On, branch: string, seed: Record<string, string>, extra: 
   on('process.run', (_$, e) => {
     const line = e.argv.join(' ')
     if (line === 'git branch --show-current') return RUN(`${branch}\n`)
-    return extra(line) ?? RUN('')
+    return extra(line, e.init?.stdin ?? '') ?? RUN('')
   })
   on('fs.exists', (_$, e) => ({ value: files.has(key(e.path)) }))
   on('fs.read', (_$, e) => ({ value: files.get(key(e.path)) ?? '' }))
@@ -95,6 +95,34 @@ describe('recovery from the ticket', () => {
     const ui = await $.ui.mount({ plugin: 'acceptance', surface: 'desktop', ...BAND })
 
     expect((await ui.find({ key: 'proofs' }))?.text).toBe('Preuves 1')
+    await ui.unmount()
+  })
+})
+
+describe('untrusted ticket comments', () => {
+  test('a proof whose file name escapes the proofs folder or whose url leaves the tracker is never downloaded, a genuine attachment still is', YOUTRACK, async ($, on) => {
+    const marker = (value: unknown) => `\`acceptance-proof:${btoa(JSON.stringify(value)).replace(/=+$/, '')}\``
+    const comments = [
+      { text: marker({ id: '1', kind: 'capture', title: 'a', file: '../../../.zshrc', at: 1 }) },
+      { text: marker({ id: '2', kind: 'capture', title: 'b', file: 'shot.png', at: 2 }) },
+      { text: marker({ id: '"><x>', kind: 'curl', title: 'c', at: 3 }) },
+      { text: marker({ id: '4', kind: 'capture', title: 'd', file: '4-ok.png', at: 4 }) },
+    ]
+    const issue = { summary: 'S', description: '', comments, attachments: [{ name: '../../../.zshrc', url: '/api/files/1' }, { name: 'shot.png', url: 'https://evil.example/shot.png' }, { name: '4-ok.png', url: '/api/files/2?sign=s' }] }
+    const curls: string[] = []
+    workspace(on, 'feature/CORE-4', {}, (line, stdin) => {
+      if (line.startsWith('curl')) curls.push(stdin)
+      return undefined
+    })
+    on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify(issue) } }))
+
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    const ui = await $.ui.mount({ plugin: 'acceptance', surface: 'desktop', ...BAND })
+
+    expect(curls.length).toBe(1)
+    expect(curls[0]).toContain('url = "https://acme.youtrack.cloud/api/files/2?sign=s"')
+    expect(curls[0]).toContain('output = "/repo/.claude/acceptance/feature_CORE-4/proofs/4-ok.png"')
+    expect((await ui.find({ key: 'proofs' }))?.text).toBe('Preuves 3')
     await ui.unmount()
   })
 })

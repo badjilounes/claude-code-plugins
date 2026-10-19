@@ -36,7 +36,7 @@ The install asks for the options below; change them later from `/config`.
 | `token` | A permanent token | A personal access token with **Work Items (Read & write)** |
 | Ticket IDs | `CORE-42` → branch `feature/CORE-42` | `1234` → branch `feature/1234`, shown as `#1234` |
 
-The token is stored in secure storage. Leave it empty to read it from the `ACCEPTANCE_TRACKER_TOKEN` environment variable instead.
+The tracker must be served over HTTPS: the token is only ever sent to `trackerUrl`'s origin, and proof files are only downloaded from it. The token is stored in secure storage. Leave it empty to read it from the `ACCEPTANCE_TRACKER_TOKEN` environment variable instead.
 
 Without a configured tracker the plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
 

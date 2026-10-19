@@ -25,6 +25,45 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+const TRACKER_NAMES: Record<TrackerKind, string> = { youtrack: 'YouTrack', 'azure-devops': 'Azure DevOps' }
+const SAFE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/
+
+export function trackerName(config: TrackerConfig): string {
+  return TRACKER_NAMES[config.kind]
+}
+
+export function safeFileName(name: string): string {
+  return SAFE_FILE.test(name) && !name.includes('..') ? name : ''
+}
+
+export function isProofId(id: unknown): id is string {
+  return typeof id === 'string' && SAFE_ID.test(id)
+}
+
+export function isTrackerUrl(config: TrackerConfig, url: string): boolean {
+  try {
+    const target = new URL(url)
+    const home = new URL(config.url)
+    return target.protocol === 'https:' && target.origin === home.origin
+  } catch {
+    return false
+  }
+}
+
+export function curlString(value: string): string | undefined {
+  if (/[\u0000-\u001f\u007f]/.test(value)) return undefined
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+export function curlLines(entries: [string, string][]): string[] {
+  const lines = entries.map(([key, value]) => {
+    const quoted = curlString(value)
+    return quoted === undefined ? undefined : `${key} = ${quoted}`
+  })
+  return lines.every(line => line !== undefined) ? (lines as string[]) : []
+}
+
 export function configOf(options: Readonly<Record<string, unknown>>, envToken: string): TrackerConfig {
   const kind: TrackerKind = options.tracker === 'azure-devops' ? 'azure-devops' : 'youtrack'
 
@@ -274,9 +313,17 @@ export function commentRequest(config: TrackerConfig, id: string, markdown: stri
 
 export function uploadLines(config: TrackerConfig, id: string, file: string, name: string): string[] {
   if (config.kind === 'azure-devops') {
-    return [`url = "${azureApi(config, `attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`)}"`, 'header = "Content-Type: application/octet-stream"', `data-binary = "@${file}"`]
+    return curlLines([
+      ['url', azureApi(config, `attachments?fileName=${encodeURIComponent(name)}&api-version=7.1`)],
+      ['header', 'Content-Type: application/octet-stream'],
+      ['data-binary', `@${file}`],
+    ])
   }
-  return [`url = "${config.url}/api/issues/${id}/attachments?fields=name,url"`, `form = "upload=@${file}"`]
+  if (/[;,"]/.test(file)) return []
+  return curlLines([
+    ['url', `${config.url}/api/issues/${encodeURIComponent(id)}/attachments?fields=name,url`],
+    ['form', `upload=@${file}`],
+  ])
 }
 
 export function uploadedUrlOf(config: TrackerConfig, output: string): string {

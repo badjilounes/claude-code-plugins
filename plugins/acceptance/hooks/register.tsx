@@ -16,7 +16,12 @@ import {
   exampleId,
   isReady,
   isTicketId,
+  curlLines,
+  isProofId,
+  isTrackerUrl,
   labelOf,
+  safeFileName,
+  trackerName,
   issueOf,
   issueRequest,
   issueUrl,
@@ -196,7 +201,8 @@ async function send($: EngineInterface, config: TrackerConfig, request: HttpRequ
 
 async function curl($: EngineInterface, config: TrackerConfig, lines: string[]): Promise<string> {
   if (!isReady(config)) return ''
-  const script = [`header = "Authorization: ${authHeader(config)}"`, 'silent', 'show-error', 'fail', ...lines].join('\n')
+  if (lines.length === 0) return ''
+  const script = [...curlLines([['header', `Authorization: ${authHeader(config)}`]]), 'silent', 'show-error', 'fail', 'proto = "=https"', ...lines].join('\n')
   const ran = await $.process.run(['curl', '--config', '-'], { stdin: `${script}\n`, timeoutMs: 120000 }).catch(() => undefined)
 
   return ran !== undefined && ran.exitCode === 0 ? ran.stdout : ''
@@ -259,26 +265,28 @@ async function pushProof($: EngineInterface, config: TrackerConfig, ticket: stri
 async function evidenceFromComment($: EngineInterface, config: TrackerConfig, text: string, attachments: { name: string; url: string }[], dir: string): Promise<Evidence | undefined> {
   const parsed = proofOf(text)
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const mark = parsed as { id?: string; kind?: EvidenceKind; title?: string; subtitle?: string; scenario?: string; detail?: string; file?: string; page?: string; at?: number }
-  const fileName = mark.file ?? ''
-  const attachment = attachments.find(one => one.name === fileName)
-  const remote = attachment?.url ?? ''
+  const mark = parsed as { id?: unknown; kind?: EvidenceKind; title?: unknown; subtitle?: unknown; scenario?: unknown; detail?: unknown; file?: unknown; at?: unknown }
+  if (!isProofId(mark.id)) return undefined
+  const words = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : '')
+  const fileName = safeFileName(words(mark.file, 128))
+  const attachment = fileName === '' ? undefined : attachments.find(one => one.name === fileName)
+  const remote = attachment !== undefined && isTrackerUrl(config, attachment.url) ? attachment.url : ''
   let file = ''
   if (remote !== '') {
     file = `${dir}/${fileName}`
     if (!(await $.fs.exists(file))) {
       await $.process.run(['mkdir', '-p', dir])
-      await curl($, config, [`url = "${remote}"`, `output = "${file}"`])
+      await curl($, config, curlLines([['url', remote], ['output', file]]))
       if (!(await $.fs.exists(file))) file = ''
     }
   }
   const item: Evidence = {
-    id: mark.id ?? `${mark.at ?? 0}`,
+    id: mark.id,
     kind: KINDS.find(one => one === mark.kind) ?? 'other',
-    title: mark.title ?? '',
-    subtitle: mark.subtitle ?? '',
-    scenario: mark.scenario ?? '',
-    detail: mark.detail ?? '',
+    title: words(mark.title, 160),
+    subtitle: words(mark.subtitle, 160),
+    scenario: words(mark.scenario, 200),
+    detail: words(mark.detail, 600),
     file,
     media: file !== '' ? mediaOf(file) : '',
     thumb: '',
@@ -287,9 +295,9 @@ async function evidenceFromComment($: EngineInterface, config: TrackerConfig, te
     width: 0,
     height: 0,
     remote,
-    page: mark.page ?? '',
+    page: '',
     isSynced: true,
-    at: mark.at ?? 0,
+    at: typeof mark.at === 'number' && Number.isFinite(mark.at) ? mark.at : 0,
   }
 
   return withThumbnails($, item)
@@ -302,8 +310,8 @@ async function pullTicket($: EngineInterface, config: TrackerConfig, ticket: str
   const cwd = await $.session.cwd()
   const recovered: Evidence[] = []
   for (const comment of issue.comments) {
-    const mark = proofOf(comment) as { id?: string } | undefined
-    if (mark?.id === undefined || known.has(mark.id)) continue
+    const mark = proofOf(comment) as { id?: unknown } | undefined
+    if (!isProofId(mark?.id) || known.has(mark.id)) continue
     const item = await evidenceFromComment($, config, comment, issue.attachments, `${cwd}/${base}/proofs`)
     if (item !== undefined) recovered.push(item)
   }
@@ -516,6 +524,7 @@ async function pageContent($: EngineInterface, name: string, links: PageLinks): 
   const scenarios = rules.subjects.flatMap(subject => subject.scenarios)
   const info: PageTicket = {
     id: labelOf(held.id),
+    tracker: trackerName(await trackerConfig($)),
     url: held.url,
     summary: held.summary,
     context: held.context,
@@ -619,7 +628,6 @@ const CRITERIA_TOOL = 'save_acceptance_criteria'
 const CREATE_TOOL = 'create_ticket'
 const USE_TOOL = 'use_ticket'
 const BRANCH_CREATE = /git\s+(?:checkout\s+-b|switch\s+(?:-c|--create)|branch(?!\s+-)|worktree\s+add\s+(?:\S+\s+)*?-b)\s+([^\s;&|]+)/
-const TRACKER_NAME: Record<TrackerConfig['kind'], string> = { youtrack: 'YouTrack', 'azure-devops': 'Azure DevOps' }
 
 function criteriaPath(branch: string): string {
   return `.claude/acceptance/${slug(branch)}.feature`
@@ -637,9 +645,9 @@ async function artifactLinks($: EngineInterface, branch: string, label: string):
 }
 
 async function required($: EngineInterface, config: TrackerConfig, request: HttpRequest): Promise<unknown> {
-  if (!isReady(config)) throw new Error(`${TRACKER_NAME[config.kind]} n'est pas configuré (URL, jeton${config.kind === 'azure-devops' ? ', projet' : ''})`)
+  if (!isReady(config)) throw new Error(`${trackerName(config)} n'est pas configuré (URL, jeton${config.kind === 'azure-devops' ? ', projet' : ''})`)
   const response = await $.http.fetch(request.url, { method: request.method, headers: request.headers, body: request.body })
-  if (!response.ok) throw new Error(`${TRACKER_NAME[config.kind]} ${response.status} : ${response.text.slice(0, 200)}`)
+  if (!response.ok) throw new Error(`${trackerName(config)} ${response.status} : ${response.text.slice(0, 200)}`)
 
   return JSON.parse(response.text || '{}')
 }
@@ -681,7 +689,7 @@ Avant d'écrire du code pour une demande de fonctionnalité, de correction ou de
 1. Reformule la demande en critères d'acceptation Gherkin (Feature / Rule / Scenario / Given / When / Then, mots-clés anglais), cas nominal, cas limites et cas d'erreur inclus. Regroupe les scénarios par sujet sous des \`Rule: <sujet>\` : l'artefact Règles en fait une checklist par sujet.
 2. Signale les ambiguïtés et pose les questions qui changent les critères ; propose pour chacune une réponse par défaut.
 3. Négocie : présente les scénarios, ajuste-les selon les retours, et attends un accord explicite avant d'implémenter.
-4. Ticket (${TRACKER_NAME[config.kind]}) : si la branche ne porte pas de numéro de ticket, crée-le avec mcp__acceptance__${CREATE_TOOL} ${projectHint(config)}, avec un contexte complet : la demande, le pourquoi, les décisions de la négociation. Pour reprendre un ticket existant, mcp__acceptance__${USE_TOOL}. Les deux basculent sur la branche feature/<ID> (fix/<ID> pour un bug), par exemple ${example} : ne crée jamais de branche sans numéro de ticket.
+4. Ticket (${trackerName(config)}) : si la branche ne porte pas de numéro de ticket, crée-le avec mcp__acceptance__${CREATE_TOOL} ${projectHint(config)}, avec un contexte complet : la demande, le pourquoi, les décisions de la négociation. Pour reprendre un ticket existant, mcp__acceptance__${USE_TOOL}. Les deux basculent sur la branche feature/<ID> (fix/<ID> pour un bug), par exemple ${example} : ne crée jamais de branche sans numéro de ticket.
 5. Enregistre les règles validées avec mcp__acceptance__${CRITERIA_TOOL} : elles vont dans la description du ticket. Renégocie et réenregistre si elles changent.
 6. Chaque preuve passe par mcp__acceptance__${TOOL} avec un titre de groupe (surface et contexte : « Web — Calendrier mobile »), un sous-titre (la variante : « sans publication »), le nom exact du Scenario qu'elle satisfait (il se coche dans Règles) et le chemin du fichier pour une capture ou une vidéo. Elle est jointe au ticket.
 7. À la fin, rapporte scénario par scénario s'il est satisfait et par quelle preuve. Ton résumé final liste toujours les artefacts du ticket, chacun par son nom exact et son lien : « <ID> — Ticket », « <ID> — Règles », « <ID> — Preuves ».
@@ -690,7 +698,7 @@ Une question, une lecture ou une modification triviale n'exige ni négociation n
 }
 
 async function registerInputTools($: EngineInterface, config: TrackerConfig): Promise<void> {
-  const name = TRACKER_NAME[config.kind]
+  const name = trackerName(config)
   await $.tool.register({
     name: CRITERIA_TOOL,
     description: `Enregistre les critères d'acceptation Gherkin validés pour la branche courante, localement et dans la description de son ticket ${name} (remplace la version précédente).`,

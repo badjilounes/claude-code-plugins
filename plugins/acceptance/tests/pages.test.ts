@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { proofsPage, rulesPage, ticketPage } from '../hooks/pages'
 
-const TICKET = { id: 'CORE-25', url: 'https://acme.youtrack.cloud/issue/CORE-25', summary: 'Calendrier', context: 'Pourquoi', branch: 'feature/CORE-25', branchUrl: 'https://gh/tree', status: 'dirty', done: 1, total: 2, proofs: 2 }
+const TICKET = { id: 'CORE-25', tracker: 'YouTrack', url: 'https://acme.youtrack.cloud/issue/CORE-25', summary: 'Calendrier', context: 'Pourquoi', branch: 'feature/CORE-25', branchUrl: 'https://gh/tree', status: 'dirty', done: 1, total: 2, proofs: 2 }
 const LINKS = { ticket: 'https://claude.ai/artifact/T', rules: 'https://claude.ai/artifact/R', proofs: 'https://claude.ai/artifact/P' }
 
 describe('ticket artifacts', () => {
@@ -28,5 +28,16 @@ describe('ticket artifacts', () => {
     expect(page).toContain('id="view-7"')
     expect(page).toContain('href="https://claude.ai/artifact/R#rule-aucune-publication"')
     expect(page).toContain('200 &lt;OK&gt;')
+  })
+
+  test('a proof id never breaks out of its attribute', async () => {
+    const page = proofsPage(TICKET, [{ id: '"><script>x()</script>', kind: 'capture', media: 'image', group: 'Web', subtitle: 's', scenario: '', src: 'media/a.png', text: '', link: '' }], LINKS)
+
+    expect(page).not.toContain('<script>')
+    expect(page).toContain('id="proof-&quot;&gt;')
+  })
+
+  test('the external chip names the configured tracker', async () => {
+    expect(ticketPage({ ...TICKET, tracker: 'Azure DevOps' }, LINKS)).toContain('Azure DevOps')
   })
 })
