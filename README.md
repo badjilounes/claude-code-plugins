@@ -13,6 +13,7 @@ claude plugin marketplace add badjilounes/claude-code-plugins
 | Plugin | Install | What it does |
 | --- | --- | --- |
 | **CodBoard** | `claude plugin install codboard@badjilounes` | The [CodBoard](https://github.com/badjilounes/board) MCP server + the watcher workflow as on-demand skills. Browser OAuth — no key to paste. See [`plugins/codboard`](plugins/codboard). |
+| **Acceptance** | `claude plugin install acceptance@badjilounes` | Negotiates Gherkin acceptance criteria before any code, files the ticket in YouTrack or Azure DevOps and names the branch after it, then collects every proof into the ticket and publishes Ticket / Règles / Preuves artifacts. See [`plugins/acceptance`](plugins/acceptance). |
 
 ## Layout
 
@@ -20,7 +21,8 @@ claude plugin marketplace add badjilounes/claude-code-plugins
 .claude-plugin/
 └── marketplace.json          # catalog: lists each plugin → ./plugins/<name>
 plugins/
-└── codboard/                  # the CodBoard plugin (manifest, .mcp.json, skills, README)
+├── codboard/                  # the CodBoard plugin (manifest, .mcp.json, skills, README)
+└── acceptance/                # the Acceptance plugin (manifest, hooks module, types, tests, README)
 ```
 
 The catalog lives at the repo **root** (`.claude-plugin/marketplace.json`) because
