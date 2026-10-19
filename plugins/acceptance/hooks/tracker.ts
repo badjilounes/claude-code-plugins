@@ -84,19 +84,23 @@ export const SETTINGS_FILE = '.claude/acceptance.json'
 
 export type TrackerSettings = { tracker: TrackerKind; trackerUrl: string; projects: string; azureProject: string; azureWorkItemType: string }
 
+export function normalizedUrl(raw: string): string {
+  if (/[\\\s@]/.test(raw)) return ''
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== '' || parsed.search !== '' || parsed.hash !== '') return ''
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+  } catch {
+    return ''
+  }
+}
+
 export function settingsOf(args: string): TrackerSettings | string {
   const [url = '', target = '', ...rest] = args.trim().split(/\s+/).filter(Boolean)
-  const parsed = (() => {
-    try {
-      return new URL(url)
-    } catch {
-      return undefined
-    }
-  })()
-  if (parsed === undefined || parsed.protocol !== 'https:') return "L'URL du tracker doit être une adresse https (ex. https://<org>.youtrack.cloud)."
-  const azure = /(^|\.)(dev\.azure\.com|visualstudio\.com)$/i.test(parsed.hostname)
+  const trackerUrl = normalizedUrl(url)
+  if (trackerUrl === '') return "L'URL du tracker doit être une adresse https simple, sans identifiants, requête ni fragment (ex. https://<org>.youtrack.cloud)."
+  const azure = /(^|\.)(dev\.azure\.com|visualstudio\.com)$/i.test(new URL(trackerUrl).hostname)
   if (azure && target === '') return 'Azure DevOps : précise le projet après l\'URL.'
-  const trackerUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
 
   return azure
     ? { tracker: 'azure-devops', trackerUrl, projects: '', azureProject: target, azureWorkItemType: rest.join(' ') || 'User Story' }

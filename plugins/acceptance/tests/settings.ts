@@ -23,8 +23,8 @@ export function withSettings(name: string, fixture: Fixture | Body, body?: Body)
       })
     }
     if (typeof settings.trackerUrl === 'string') {
-      const origin = new URL(settings.trackerUrl).origin
-      ;(on as Hook)('store.get', (_$: unknown, e: { key: string }) => ({ value: e.key === 'approvedOrigins' ? [origin] : undefined }))
+      const key = `${settings.tracker ?? 'youtrack'} ${settings.trackerUrl.replace(/\/+$/, '')} ${settings.azureProject ?? ''}`
+      ;(on as Hook)('store.get', (_$: unknown, e: { key: string }) => ({ value: e.key === 'approvedTrackers' ? [key] : undefined }))
     }
     const layered = ((event: string, ...rest: unknown[]) => (event in served ? own.set(event, rest[rest.length - 1] as Hook) : (on as Hook)(event, ...rest))) as On
 

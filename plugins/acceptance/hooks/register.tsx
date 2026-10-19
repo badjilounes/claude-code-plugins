@@ -23,6 +23,7 @@ import {
   safeFileName,
   SETTINGS_FILE,
   settingsOf,
+  normalizedUrl,
   trackerName,
   issueOf,
   issueRequest,
@@ -198,43 +199,46 @@ async function savedSettings($: EngineInterface): Promise<Record<string, unknown
   }
 }
 
-async function approvedOrigins($: EngineInterface): Promise<string[]> {
-  const saved = await $.store.get('approvedOrigins').catch(() => undefined)
+const HUMAN = ['composer', 'bridge']
+
+async function approvedTrackers($: EngineInterface): Promise<string[]> {
+  const saved = await $.store.get('approvedTrackers').catch(() => undefined)
   return Array.isArray(saved) ? saved.filter((one): one is string => typeof one === 'string') : []
 }
 
-function originOf(url: string): string {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' ? parsed.origin : ''
-  } catch {
-    return ''
-  }
+function approvalKey(config: TrackerConfig): string {
+  return `${config.kind} ${config.url} ${config.project}`
 }
 
-async function unapprovedOrigin($: EngineInterface, config: TrackerConfig): Promise<string> {
-  const origin = originOf(config.url)
-  return config.url !== '' && (origin === '' || !(await approvedOrigins($)).includes(origin)) ? config.url : ''
+async function rawConfig($: EngineInterface): Promise<TrackerConfig> {
+  const saved = await savedSettings($)
+  const config = configOf({ ...saved, token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
+  return { ...config, url: typeof saved.trackerUrl === 'string' && saved.trackerUrl !== '' ? normalizedUrl(saved.trackerUrl) || 'invalid' : '' }
+}
+
+async function isApproved($: EngineInterface, config: TrackerConfig): Promise<boolean> {
+  return config.url === '' || (config.url !== 'invalid' && (await approvedTrackers($)).includes(approvalKey(config)))
 }
 
 async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
-  const config = configOf({ ...(await savedSettings($)), token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
-  return (await unapprovedOrigin($, config)) === '' ? config : { ...config, token: '' }
+  const config = await rawConfig($)
+  return (await isApproved($, config)) ? config : { ...config, url: '', token: '' }
 }
 
 async function configProblem($: EngineInterface, config: TrackerConfig): Promise<string> {
-  const raw = configOf({ ...(await savedSettings($)), token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
-  const pending = await unapprovedOrigin($, raw)
-  return pending !== '' ? `${trackerName(config)} : ${pending} vient de ${SETTINGS_FILE} et n'a pas été approuvé sur cette machine — le jeton n'y est pas envoyé. Lance toi-même /${SETUP} ${pending} pour l'approuver` : notConfigured(config)
+  const raw = await rawConfig($)
+  if (raw.url === 'invalid') return `${trackerName(config)} : l'URL de ${SETTINGS_FILE} n'est pas une adresse https simple — le jeton n'est envoyé nulle part. Lance toi-même /${SETUP}`
+  if (await isApproved($, raw)) return notConfigured(config)
+  return `${trackerName(config)} : le tracker de ${SETTINGS_FILE} (${new URL(raw.url).origin}) n'a pas été approuvé sur cette machine — le jeton n'y est pas envoyé. Seul l'utilisateur peut l'approuver, en lançant lui-même /${SETUP}`
 }
 
 async function setup($: EngineInterface, args: string, origin: string): Promise<{ text: string }> {
-  if (origin === 'plugin') return { text: `/${SETUP} se lance à la main : il décide où part le jeton du tracker.` }
+  if (!HUMAN.includes(origin)) return { text: `/${SETUP} se lance à la main : il décide où part le jeton du tracker.` }
   const settings = settingsOf(args)
   if (typeof settings === 'string') return { text: `${settings}\n\nUsage : /${SETUP} <url> [projets YouTrack, ex. CORE,GROWTH] — ou /${SETUP} https://dev.azure.com/<org> <projet> [type de work item]` }
   await $.fs.write(`${await $.session.cwd()}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
-  const approved = await approvedOrigins($)
-  await $.store.set('approvedOrigins', [...new Set([...approved, originOf(settings.trackerUrl)])])
+  const approved = configOf({ ...settings }, '')
+  await $.store.set('approvedTrackers', [...new Set([...(await approvedTrackers($)), approvalKey(approved)])])
   const config = configOf({ ...settings, token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
   const token = config.token !== '' ? '' : ' Jeton manquant : renseigne l\'option token du plugin (/config) ou la variable ACCEPTANCE_TRACKER_TOKEN.'
 

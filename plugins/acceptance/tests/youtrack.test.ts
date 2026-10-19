@@ -162,7 +162,7 @@ describe('setup on YouTrack', () => {
 
     expect(JSON.parse(files.get('/repo/.claude/acceptance.json') ?? '{}')).toEqual({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD,CORE', azureProject: '', azureWorkItemType: '' })
     expect(JSON.stringify(ran)).toContain('https://sofia-post.youtrack.cloud')
-    expect(stored).toEqual([['https://sofia-post.youtrack.cloud']])
+    expect(stored).toEqual([['youtrack https://sofia-post.youtrack.cloud ']])
   })
 
   test('/acceptance-setup refuses an address that is not https', { options: { token: 'secret' } }, async ($, on) => {
@@ -226,7 +226,25 @@ describe('tracker origin approval', () => {
     expect(ran).toContain("n'a pas été approuvé")
   })
 
-  test('/acceptance-setup run by another plugin is refused', { options: { token: 'secret' } }, async ($, on) => {
+  test('a tracker URL hiding another host behind credentials or a backslash is never used', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const fetched: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://acme.youtrack.cloud@evil.example', projects: 'CORE' }) }))
+    on('store.get', () => ({ value: ['youtrack https://acme.youtrack.cloud@evil.example '] }))
+    on('http.fetch', (_$, e) => {
+      fetched.push(e.url)
+      return OK({})
+    })
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'CORE-1' }))
+
+    expect(fetched).toEqual([])
+    expect(ran).toContain('https simple')
+  })
+
+  test('/acceptance-setup that a person did not type is refused', { options: { token: 'secret' } }, async ($, on) => {
     base(on)
     const written: string[] = []
     on('fs.write', (_$, e) => {
@@ -234,7 +252,7 @@ describe('tracker origin approval', () => {
       return { value: undefined }
     })
 
-    await $.command.run({ command: 'acceptance-setup', args: 'https://evil.example', origin: { kind: 'plugin', name: 'x' } } as never)
+    await $.command.run({ command: 'acceptance-setup', args: 'https://evil.example', origin: { kind: 'sdk' } } as never)
 
     expect(written).toEqual([])
   })
