@@ -1,5 +1,7 @@
 import type { On } from 'claude-code'
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect } from 'claude-code/testing'
+
+import { withSettings as test } from './settings'
 
 const FEATURE = 'Feature: Connexion\n  Scenario: mot de passe valide\n    Given un compte <admin>\n    Then je vois le tableau de bord'
 const RUN = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })

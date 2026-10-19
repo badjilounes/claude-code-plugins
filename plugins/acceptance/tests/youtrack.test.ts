@@ -1,5 +1,7 @@
 import type { On } from 'claude-code'
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect } from 'claude-code/testing'
+
+import { withSettings as test } from './settings'
 
 const FEATURE = 'Feature: Connexion\n  Scenario: mot de passe valide\n    Given un compte\n    When je me connecte\n    Then je vois le tableau de bord'
 const RUN = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
@@ -136,5 +138,122 @@ describe('prompt context', () => {
     const context = JSON.stringify(await $.prompt.submit({ text: 'ajoute le calendrier', wait: false } as never))
 
     expect(context).toContain("n'est pas configuré")
+  })
+})
+
+describe('setup on YouTrack', () => {
+  test('/acceptance-setup writes the tracker URL and projects into the repository', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const files = new Map<string, string>()
+    on('fs.exists', (_$, e) => ({ value: files.has(e.path) }))
+    on('fs.read', (_$, e) => ({ value: files.get(e.path) ?? '' }))
+    on('fs.write', (_$, e) => {
+      files.set(e.path, e.text)
+      return { value: undefined }
+    })
+    const stored: unknown[] = []
+    on('store.get', () => ({ value: undefined }))
+    on('store.set', (_$, e) => {
+      stored.push(e.value)
+      return { value: undefined }
+    })
+
+    const ran = await $.command.run({ command: 'acceptance-setup', args: 'https://sofia-post.youtrack.cloud/ SPROD,CORE', origin: { kind: 'composer' } } as never)
+
+    expect(JSON.parse(files.get('/repo/.claude/acceptance.json') ?? '{}')).toEqual({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD,CORE', azureProject: '', azureWorkItemType: '' })
+    expect(JSON.stringify(ran)).toContain('https://sofia-post.youtrack.cloud')
+    expect(stored).toEqual([['youtrack https://sofia-post.youtrack.cloud ']])
+  })
+
+  test('/acceptance-setup refuses an address that is not https', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const written: string[] = []
+    on('fs.exists', () => ({ value: false }))
+    on('fs.write', (_$, e) => {
+      written.push(e.path)
+      return { value: undefined }
+    })
+
+    const ran = await $.command.run({ command: 'acceptance-setup', args: 'http://acme.youtrack.cloud', origin: { kind: 'composer' } } as never)
+
+    expect(written).toEqual([])
+    expect(JSON.stringify(ran)).toContain('https')
+  })
+})
+
+describe('use_ticket on YouTrack', () => {
+  test('says the tracker is not set up instead of calling the ticket missing', async ($, on) => {
+    base(on)
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', () => ({ value: false }))
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' }))
+
+    expect(ran).toContain("n'est pas configuré")
+    expect(ran).toContain('/acceptance-setup')
+    expect(ran).not.toContain('introuvable')
+  })
+
+  test('reports the status the tracker answered when the ticket cannot be read', YOUTRACK, async ($, on) => {
+    base(on)
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', () => ({ value: false }))
+    on('http.fetch', () => ({ value: { status: 404, ok: false, headers: {}, text: '{"error":"Entity not found"}' } }))
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' }))
+
+    expect(ran).toContain('https://acme.youtrack.cloud')
+    expect(ran).toContain('404')
+  })
+})
+
+describe('tracker origin approval', () => {
+  test('never sends the token to a tracker URL the repository chose without approval', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const fetched: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://evil.example', projects: 'CORE' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('http.fetch', (_$, e) => {
+      fetched.push(e.url)
+      return OK({})
+    })
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'CORE-1' }))
+
+    expect(fetched).toEqual([])
+    expect(ran).toContain("n'a pas été approuvé")
+  })
+
+  test('a tracker URL hiding another host behind credentials or a backslash is never used', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const fetched: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://acme.youtrack.cloud@evil.example', projects: 'CORE' }) }))
+    on('store.get', () => ({ value: ['youtrack https://acme.youtrack.cloud@evil.example '] }))
+    on('http.fetch', (_$, e) => {
+      fetched.push(e.url)
+      return OK({})
+    })
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'CORE-1' }))
+
+    expect(fetched).toEqual([])
+    expect(ran).toContain('https simple')
+  })
+
+  test('/acceptance-setup that a person did not type is refused', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const written: string[] = []
+    on('fs.write', (_$, e) => {
+      written.push(e.path)
+      return { value: undefined }
+    })
+
+    await $.command.run({ command: 'acceptance-setup', args: 'https://evil.example', origin: { kind: 'sdk' } } as never)
+
+    expect(written).toEqual([])
   })
 })
