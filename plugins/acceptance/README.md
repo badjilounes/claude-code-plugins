@@ -41,6 +41,8 @@ The tracker is set per repository, by one command only:
 
 It writes `.claude/acceptance.json` at the repository root. Commit it: every session, a cloud one included, reads the tracker from there.
 
+Running the command yourself also approves the tracker's origin on this machine (kept in the plugin's user store). The token is only sent to an approved origin: a `.claude/acceptance.json` that a repository ships pointing elsewhere is not trusted until you run `/acceptance-setup` with that URL. Another plugin cannot run the command. A cloud container starts with an empty store, so run `/acceptance-setup` once per cloud session.
+
 The token is never written to the repository: set the plugin's `token` option (`/config`, kept in secure storage) or the `ACCEPTANCE_TRACKER_TOKEN` environment variable (the one to use in a cloud environment). The tracker must be served over HTTPS: the token is only ever sent to the tracker URL's origin, and proof files are only downloaded from it.
 
 When the tracker is not configured, the tools say what is missing (URL or token) instead of reporting the ticket as missing. The plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.

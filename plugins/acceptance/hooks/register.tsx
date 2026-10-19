@@ -198,14 +198,43 @@ async function savedSettings($: EngineInterface): Promise<Record<string, unknown
   }
 }
 
-async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
-  return configOf({ ...(await savedSettings($)), token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
+async function approvedOrigins($: EngineInterface): Promise<string[]> {
+  const saved = await $.store.get('approvedOrigins').catch(() => undefined)
+  return Array.isArray(saved) ? saved.filter((one): one is string => typeof one === 'string') : []
 }
 
-async function setup($: EngineInterface, args: string): Promise<{ text: string }> {
+function originOf(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' ? parsed.origin : ''
+  } catch {
+    return ''
+  }
+}
+
+async function unapprovedOrigin($: EngineInterface, config: TrackerConfig): Promise<string> {
+  const origin = originOf(config.url)
+  return config.url !== '' && (origin === '' || !(await approvedOrigins($)).includes(origin)) ? config.url : ''
+}
+
+async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
+  const config = configOf({ ...(await savedSettings($)), token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
+  return (await unapprovedOrigin($, config)) === '' ? config : { ...config, token: '' }
+}
+
+async function configProblem($: EngineInterface, config: TrackerConfig): Promise<string> {
+  const raw = configOf({ ...(await savedSettings($)), token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
+  const pending = await unapprovedOrigin($, raw)
+  return pending !== '' ? `${trackerName(config)} : ${pending} vient de ${SETTINGS_FILE} et n'a pas été approuvé sur cette machine — le jeton n'y est pas envoyé. Lance toi-même /${SETUP} ${pending} pour l'approuver` : notConfigured(config)
+}
+
+async function setup($: EngineInterface, args: string, origin: string): Promise<{ text: string }> {
+  if (origin === 'plugin') return { text: `/${SETUP} se lance à la main : il décide où part le jeton du tracker.` }
   const settings = settingsOf(args)
   if (typeof settings === 'string') return { text: `${settings}\n\nUsage : /${SETUP} <url> [projets YouTrack, ex. CORE,GROWTH] — ou /${SETUP} https://dev.azure.com/<org> <projet> [type de work item]` }
   await $.fs.write(`${await $.session.cwd()}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
+  const approved = await approvedOrigins($)
+  await $.store.set('approvedOrigins', [...new Set([...approved, originOf(settings.trackerUrl)])])
   const config = configOf({ ...settings, token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
   const token = config.token !== '' ? '' : ' Jeton manquant : renseigne l\'option token du plugin (/config) ou la variable ACCEPTANCE_TRACKER_TOKEN.'
 
@@ -815,7 +844,7 @@ async function useTicket($: EngineInterface, input: Record<string, unknown>): Pr
   const config = await trackerConfig($)
   const id = typeof input.id === 'string' ? input.id.trim().replace(/^#/, '') : ''
   if (!isTicketId(config, id)) return { deny: `L'identifiant doit ressembler à ${exampleId(config)}.` }
-  if (!isReady(config)) return { deny: notConfigured(config) }
+  if (!isReady(config)) return { deny: await configProblem($, config) }
   const issue = await required($, config, issueRequest(config, id)).then(
     response => issueOf(config, response, undefined),
     (error: unknown) => String(error),
@@ -891,7 +920,7 @@ export const register: Register = (on, options) => {
     const label = displayId(config, ticket)
     const rules = (await $.fs.exists(criteriaPath(branch))) ? 'Des règles validées existent (artefact Règles, description du ticket).' : 'Aucune règle validée.'
     const tracked = ticket !== '' ? `Branche ${branch}, ticket ${label} (${issueUrl(config, ticket)}).` : `Branche ${branch || '(détachée)'} sans ticket.`
-    const setup = isReady(config) ? '' : `\n\nLe gestionnaire de tickets n'est pas configuré : ${notConfigured(config)}. Propose à l'utilisateur de lancer /${SETUP} <url> [projets].`
+    const setup = isReady(config) ? '' : `\n\n${await configProblem($, config)}. Propose à l'utilisateur de lancer lui-même /${SETUP} <url> [projets].`
 
     return next({ ...e, context: [...(e.context ?? []), `${policy(config)}\n\n${tracked} ${rules}${await artifactLinks($, branch, label)}${setup}`] })
   })
@@ -913,7 +942,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: `mcp__acceptance__${USE_TOOL}` }, async ($, e) => useTicket($, e as unknown as Record<string, unknown>))
 
-  on('command.run', { command: SETUP }, async ($, e) => setup($, e.args))
+  on('command.run', { command: SETUP }, async ($, e) => setup($, e.args, e.origin.kind))
 
   on('command.run', { command: 'criteres' }, async $ => {
     const config = await trackerConfig($)
