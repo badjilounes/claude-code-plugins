@@ -244,6 +244,42 @@ describe('tracker origin approval', () => {
     expect(ran).toContain("n'a pas été approuvé")
   })
 
+  test('a tracker listed in ACCEPTANCE_TRACKER_APPROVED is used without running the setup again', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const fetched: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', (_$, e) => ({ value: e.name === 'ACCEPTANCE_TRACKER_APPROVED' ? 'https://other.youtrack.cloud, https://sofia-post.youtrack.cloud/' : undefined }))
+    on('http.fetch', (_$, e) => {
+      fetched.push(e.url)
+      return OK({ idReadable: 'SPROD-26', summary: 'Carrousel flou' })
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' })
+
+    expect(fetched[0]?.startsWith('https://sofia-post.youtrack.cloud/api/issues/SPROD-26')).toBe(true)
+  })
+
+  test('ACCEPTANCE_TRACKER_APPROVED listing another tracker approves nothing', { options: { token: 'secret' } }, async ($, on) => {
+    base(on)
+    const fetched: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://evil.example', projects: 'CORE' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', (_$, e) => ({ value: e.name === 'ACCEPTANCE_TRACKER_APPROVED' ? 'https://sofia-post.youtrack.cloud' : undefined }))
+    on('http.fetch', (_$, e) => {
+      fetched.push(e.url)
+      return OK({})
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'CORE-1' })
+
+    expect(fetched).toEqual([])
+  })
+
   test('a tracker URL hiding another host behind credentials or a backslash is never used', { options: { token: 'secret' } }, async ($, on) => {
     base(on)
     const fetched: string[] = []
