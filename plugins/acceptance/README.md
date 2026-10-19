@@ -26,19 +26,24 @@ The install asks for the options below; change them later from `/config`.
 
 ## Configure your tracker
 
-| Option | YouTrack | Azure DevOps |
+The tracker is set per repository, by one command only:
+
+```text
+/acceptance-setup https://<org>.youtrack.cloud CORE,GROWTH
+/acceptance-setup https://dev.azure.com/<organization> "<project>" [work item type]
+```
+
+| Argument | YouTrack | Azure DevOps |
 | --- | --- | --- |
-| `tracker` | `youtrack` | `azure-devops` |
-| `trackerUrl` | `https://<org>.youtrack.cloud` | `https://dev.azure.com/<organization>` |
-| `projects` | Short names tickets may be created in, the default first: `CORE,GROWTH` | — |
-| `azureProject` | — | The project that holds the work items |
-| `azureWorkItemType` | — | `User Story` by default (`Product Backlog Item`, `Issue`, `Task`…) |
-| `token` | A permanent token | A personal access token with **Work Items (Read & write)** |
+| URL | `https://<org>.youtrack.cloud` | `https://dev.azure.com/<organization>` (detected from the host) |
+| Then | Short names tickets may be created in, the default first: `CORE,GROWTH` | The project that holds the work items, then the work item type (`User Story` by default) |
 | Ticket IDs | `CORE-42` → branch `feature/CORE-42` | `1234` → branch `feature/1234`, shown as `#1234` |
 
-The tracker must be served over HTTPS: the token is only ever sent to `trackerUrl`'s origin, and proof files are only downloaded from it. The token is stored in secure storage. Leave it empty to read it from the `ACCEPTANCE_TRACKER_TOKEN` environment variable instead.
+It writes `.claude/acceptance.json` at the repository root. Commit it: every session, a cloud one included, reads the tracker from there.
 
-Without a configured tracker the plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
+The token is never written to the repository: set the plugin's `token` option (`/config`, kept in secure storage) or the `ACCEPTANCE_TRACKER_TOKEN` environment variable (the one to use in a cloud environment). The tracker must be served over HTTPS: the token is only ever sent to the tracker URL's origin, and proof files are only downloaded from it.
+
+When the tracker is not configured, the tools say what is missing (URL or token) instead of reporting the ticket as missing. The plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
 
 ## Tools Claude gets
 
@@ -49,11 +54,11 @@ Without a configured tracker the plugin still negotiates rules and keeps proofs 
 | `mcp__acceptance__use_ticket` | Resumes an existing ticket on its branch. |
 | `mcp__acceptance__add_evidence` | Adds a proof (capture, video, cURL, test, artifact, file) tied to a scenario. |
 
-`/criteres` prints the ticket and the rules of the current branch.
+`/acceptance-setup` configures the tracker; `/criteres` prints the ticket and the rules of the current branch.
 
 ## Local files
 
-Everything is kept under `.claude/acceptance/` in the repository: `<branch>.feature`, `<branch>.evidence.json`, the proof files and the published pages. Add the folder to your `.gitignore`.
+Everything is kept under `.claude/acceptance/` in the repository: `<branch>.feature`, `<branch>.evidence.json`, the proof files and the published pages. Add the folder to your `.gitignore` (but keep `.claude/acceptance.json`).
 
 ## Develop
 

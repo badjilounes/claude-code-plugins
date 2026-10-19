@@ -80,6 +80,29 @@ export function configOf(options: Readonly<Record<string, unknown>>, envToken: s
   }
 }
 
+export const SETTINGS_FILE = '.claude/acceptance.json'
+
+export type TrackerSettings = { tracker: TrackerKind; trackerUrl: string; projects: string; azureProject: string; azureWorkItemType: string }
+
+export function settingsOf(args: string): TrackerSettings | string {
+  const [url = '', target = '', ...rest] = args.trim().split(/\s+/).filter(Boolean)
+  const parsed = (() => {
+    try {
+      return new URL(url)
+    } catch {
+      return undefined
+    }
+  })()
+  if (parsed === undefined || parsed.protocol !== 'https:') return "L'URL du tracker doit être une adresse https (ex. https://<org>.youtrack.cloud)."
+  const azure = /(^|\.)(dev\.azure\.com|visualstudio\.com)$/i.test(parsed.hostname)
+  if (azure && target === '') return 'Azure DevOps : précise le projet après l\'URL.'
+  const trackerUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '')
+
+  return azure
+    ? { tracker: 'azure-devops', trackerUrl, projects: '', azureProject: target, azureWorkItemType: rest.join(' ') || 'User Story' }
+    : { tracker: 'youtrack', trackerUrl, projects: target, azureProject: '', azureWorkItemType: '' }
+}
+
 export function isReady(config: TrackerConfig): boolean {
   return config.url !== '' && config.token !== '' && (config.kind === 'youtrack' || config.project !== '')
 }
