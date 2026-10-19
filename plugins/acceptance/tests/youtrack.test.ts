@@ -165,6 +165,24 @@ describe('setup on YouTrack', () => {
     expect(stored).toEqual([['youtrack https://sofia-post.youtrack.cloud ']])
   })
 
+  test('/acceptance-setup writes at the repository root when the session sits in a subfolder', { options: { token: 'secret' } }, async ($, on) => {
+    on('session.cwd', () => ({ value: '/repo/apps/web' }))
+    on('clock.now', () => ({ value: 7 }))
+    on('process.run', (_$, e) => RUN(e.argv.join(' ') === 'git rev-parse --show-toplevel' ? '/repo\n' : 'main\n'))
+    const written: string[] = []
+    on('fs.exists', () => ({ value: false }))
+    on('fs.write', (_$, e) => {
+      written.push(e.path)
+      return { value: undefined }
+    })
+    on('store.get', () => ({ value: undefined }))
+    on('store.set', () => ({ value: undefined }))
+
+    await $.command.run({ command: 'acceptance-setup', args: 'https://acme.youtrack.cloud CORE', origin: { kind: 'composer' } } as never)
+
+    expect(written).toEqual(['/repo/.claude/acceptance.json'])
+  })
+
   test('/acceptance-setup refuses an address that is not https', { options: { token: 'secret' } }, async ($, on) => {
     base(on)
     const written: string[] = []

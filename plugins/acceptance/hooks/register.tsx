@@ -188,8 +188,14 @@ async function readJson($: EngineInterface, path: string): Promise<unknown> {
 
 let OPTIONS: Readonly<Record<string, unknown>> = {}
 
+async function repositoryRoot($: EngineInterface): Promise<string> {
+  const ran = await $.process.run(['git', 'rev-parse', '--show-toplevel']).catch(() => undefined)
+  const root = ran !== undefined && ran.exitCode === 0 ? ran.stdout.trim() : ''
+  return root.startsWith('/') ? root : $.session.cwd()
+}
+
 async function savedSettings($: EngineInterface): Promise<Record<string, unknown>> {
-  const path = `${await $.session.cwd()}/${SETTINGS_FILE}`
+  const path = `${await repositoryRoot($)}/${SETTINGS_FILE}`
   if (!(await $.fs.exists(path).catch(() => false))) return {}
   try {
     const saved: unknown = JSON.parse(await $.fs.read(path))
@@ -236,7 +242,7 @@ async function setup($: EngineInterface, args: string, origin: string): Promise<
   if (!HUMAN.includes(origin)) return { text: `/${SETUP} se lance à la main : il décide où part le jeton du tracker.` }
   const settings = settingsOf(args)
   if (typeof settings === 'string') return { text: `${settings}\n\nUsage : /${SETUP} <url> [projets YouTrack, ex. CORE,GROWTH] — ou /${SETUP} https://dev.azure.com/<org> <projet> [type de work item]` }
-  await $.fs.write(`${await $.session.cwd()}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
+  await $.fs.write(`${await repositoryRoot($)}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
   const approved = configOf({ ...settings }, '')
   await $.store.set('approvedTrackers', [...new Set([...(await approvedTrackers($)), approvalKey(approved)])])
   const config = configOf({ ...settings, token: OPTIONS.token }, (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '')
