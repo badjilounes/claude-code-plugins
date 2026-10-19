@@ -1,7 +1,7 @@
 {
   "name": "acceptance",
   "displayName": "Acceptance",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Negotiate Gherkin acceptance criteria before any code, open the ticket in your tracker (YouTrack or Azure DevOps) and name the branch after it, then collect every proof — captures, videos, cURL, test runs, artifacts — into the ticket. Rules, proofs and the ticket are published as three artifacts per ticket, linked from a band above the prompt, and any later session recovers them from the branch name.",
   "author": {
     "name": "Badji Lounes"
