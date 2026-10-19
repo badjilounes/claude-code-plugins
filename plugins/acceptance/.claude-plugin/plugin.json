@@ -1,0 +1,51 @@
+{
+  "name": "acceptance",
+  "displayName": "Acceptance",
+  "version": "0.1.0",
+  "description": "Negotiate Gherkin acceptance criteria before any code, open the ticket in your tracker (YouTrack or Azure DevOps) and name the branch after it, then collect every proof — captures, videos, cURL, test runs, artifacts — into the ticket. Rules, proofs and the ticket are published as three artifacts per ticket, linked from a band above the prompt, and any later session recovers them from the branch name.",
+  "author": { "name": "Badji Lounes" },
+  "repository": "https://github.com/badjilounes/claude-code-plugins",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "keywords": ["acceptance-criteria", "gherkin", "bdd", "youtrack", "azure-devops", "evidence", "tickets", "artifacts"],
+  "userConfig": {
+    "tracker": {
+      "type": "string",
+      "title": "Ticket tracker",
+      "description": "Which project manager holds the tickets.",
+      "options": ["youtrack", "azure-devops"],
+      "default": "youtrack"
+    },
+    "trackerUrl": {
+      "type": "string",
+      "title": "Tracker URL",
+      "description": "YouTrack: https://<org>.youtrack.cloud — Azure DevOps: https://dev.azure.com/<organization>",
+      "default": ""
+    },
+    "projects": {
+      "type": "string",
+      "title": "YouTrack projects",
+      "description": "Comma-separated short names of the YouTrack projects tickets may be created in, the default first (e.g. CORE,GROWTH).",
+      "default": ""
+    },
+    "azureProject": {
+      "type": "string",
+      "title": "Azure DevOps project",
+      "description": "The Azure DevOps project that holds the work items.",
+      "default": ""
+    },
+    "azureWorkItemType": {
+      "type": "string",
+      "title": "Azure DevOps work item type",
+      "description": "The type of the work items created (User Story, Product Backlog Item, Issue, Task…).",
+      "default": "User Story"
+    },
+    "token": {
+      "type": "string",
+      "title": "Tracker token",
+      "description": "A YouTrack permanent token or an Azure DevOps personal access token (Work Items read & write). Leave empty to use the ACCEPTANCE_TRACKER_TOKEN environment variable.",
+      "sensitive": true,
+      "default": ""
+    }
+  }
+}
