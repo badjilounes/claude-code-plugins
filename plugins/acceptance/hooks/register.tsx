@@ -222,8 +222,15 @@ async function rawConfig($: EngineInterface): Promise<TrackerConfig> {
   return { ...config, url: typeof saved.trackerUrl === 'string' && saved.trackerUrl !== '' ? normalizedUrl(saved.trackerUrl) || 'invalid' : '' }
 }
 
+async function approvedByEnvironment($: EngineInterface): Promise<string[]> {
+  const listed = (await $.env.get('ACCEPTANCE_TRACKER_APPROVED').catch(() => undefined)) ?? ''
+  return listed.split(',').map(one => normalizedUrl(one.trim())).filter(Boolean)
+}
+
 async function isApproved($: EngineInterface, config: TrackerConfig): Promise<boolean> {
-  return config.url === '' || (config.url !== 'invalid' && (await approvedTrackers($)).includes(approvalKey(config)))
+  if (config.url === '') return true
+  if (config.url === 'invalid') return false
+  return (await approvedTrackers($)).includes(approvalKey(config)) || (await approvedByEnvironment($)).includes(config.url)
 }
 
 async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
