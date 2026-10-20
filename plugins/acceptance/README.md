@@ -45,6 +45,8 @@ The command writes `.claude/acceptance.json` at the root of the git repository. 
 
 ### 2a. Local install — on your machine
 
+Works the same in every local surface: the CLI, Claude Desktop and the IDE extensions.
+
 1. Install the plugin:
 
    ```bash
@@ -52,19 +54,32 @@ The command writes `.claude/acceptance.json` at the root of the git repository. 
    claude plugin install acceptance@badjilounes
    ```
 
-   Already installed? `claude plugin update acceptance@badjilounes`.
+   Already installed? `claude plugin marketplace update badjilounes && claude plugin update acceptance@badjilounes`.
 
-2. Save your token, bound to the tracker, in the plugin's `token` option (secure storage). Paste the token alone when the command waits; it adds the URL in front:
+2. Write your token, bound to the tracker, in `~/.config/acceptance/token`, readable by you only. Paste the token alone when the command waits; it adds the URL in front:
 
    ```bash
-   read -rs T && printf '{"token":"https://<org>.youtrack.cloud %s"}' "$T" | claude plugin configure acceptance@badjilounes --values-stdin; unset T
+   mkdir -p ~/.config/acceptance && read -rs T && printf 'https://<org>.youtrack.cloud %s\n' "$T" > ~/.config/acceptance/token && chmod 600 ~/.config/acceptance/token; unset T
    ```
 
-   `claude plugin configure acceptance@badjilounes` (without `--values-stdin`) shows which options are set. If your version says `unknown command 'configure'`, run `claude update` first.
+   The plugin reads this file itself, so it does not depend on how Claude Code was started. An app opened from the Dock or a launcher does not get the variables of your shell profile; this file does not need them.
 
-3. Restart Claude Code (`/exit`, then `claude`).
+3. Restart Claude Code: `/exit` then `claude` in the CLI, or quit the app completely (Cmd+Q / Alt+F4) and reopen it.
 
-4. Check: ask Claude to resume a ticket (`use_ticket CORE-42`). It switches to `feature/CORE-42`.
+4. Check: in a session opened on the repository, ask Claude to resume a ticket (`use_ticket CORE-42`). It switches to `feature/CORE-42`.
+
+<details>
+<summary>Other places the token can go</summary>
+
+The plugin takes the first one set, in this order:
+
+1. The plugin's `token` option, kept in secure storage, set with `claude plugin configure acceptance@badjilounes --values-stdin` (JSON `{"token":"<url> <token>"}` on stdin) or `/config`. An option saved by one surface may not be seen by another (another copy of the plugin, for instance one synced from claude.ai), so prefer the file when you use several.
+2. The `ACCEPTANCE_TRACKER_TOKEN` environment variable. In a cloud environment this is the way, see 2b.
+3. The file `~/.config/acceptance/token` (`%USERPROFILE%\.config\acceptance\token` on Windows).
+
+An option left over from an earlier setup wins over the file: clear it with `printf '{"token":""}' | claude plugin configure acceptance@badjilounes --values-stdin`.
+
+</details>
 
 ### 2b. Cloud environment — claude.ai/code
 
@@ -94,8 +109,8 @@ The tools say exactly what is missing instead of calling the ticket missing:
 | Message | Fix |
 | --- | --- |
 | `n'est pas configuré : URL (/acceptance-setup)` | No `.claude/acceptance.json` at the repository root: step 1, then commit it. |
-| `n'est pas configuré : jeton` | No token where this session runs: step 2a or 2b. In the cloud, start a new session after adding the variable. |
-| `n'a pas été approuvé sur cette machine` | The token has no URL in front, or a different one: write it as `<tracker url> <token>`, with the exact URL of `.claude/acceptance.json`. Or type `/acceptance-setup <url> <projects>` yourself, which approves the tracker on this machine only. |
+| `n'est pas configuré : jeton` | No token where this session runs: step 2a or 2b. Locally, check `~/.config/acceptance/token` exists and restart the app; works in the CLI but not in Desktop usually means the token sat in the shell profile or in another surface's option, so move it to the file. In the cloud, start a new session after adding the variable. |
+| `n'a pas été approuvé sur cette machine` | Either there is no token at all (fix the token first, the message above then shows), or the token has no URL in front, or a different one: write it as `<tracker url> <token>`, with the exact URL of `.claude/acceptance.json`. Or type `/acceptance-setup <url> <projects>` yourself, which approves the tracker on this machine only. |
 | `inaccessible sur <url> : … 401` / `404` | The tracker refused the token, or the ticket does not exist for that account: check the token's rights on the project. |
 
 Without a configured tracker the plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
@@ -104,10 +119,10 @@ Without a configured tracker the plugin still negotiates rules and keeps proofs 
 
 `.claude/acceptance.json` comes with the repository, so on its own it could point anywhere. The token is therefore only sent to a tracker you approved:
 
-- **A bound token** (`<tracker url> <token>`, in the option or the variable) approves exactly that URL. A repository can override the variable, but only with a token of its own, so it never gets yours.
+- **A bound token** (`<tracker url> <token>`, in the file, the option or the variable) approves exactly that URL. A repository can override the variable, but only with a token of its own, so it never gets yours; it cannot write your home folder or your plugin options.
 - **`/acceptance-setup` typed by you** approves the tracker (kind, URL, project) in the plugin's user store on this machine. Only a person typing the command (at the prompt or through Remote Control) approves. A cloud container starts with an empty store, which is why the cloud uses a bound token.
 
-Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When both the option and the variable are set, the option wins.
+Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When several are set, the option wins, then the variable, then the file.
 
 ## Tools Claude gets
 

@@ -1,7 +1,7 @@
 {
   "name": "acceptance",
   "displayName": "Acceptance",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Negotiate Gherkin acceptance criteria before any code, open the ticket in your tracker (YouTrack or Azure DevOps) and name the branch after it, then collect every proof — captures, videos, cURL, test runs, artifacts — into the ticket. Rules, proofs and the ticket are published as three artifacts per ticket, linked from a band above the prompt, and any later session recovers them from the branch name.",
   "author": {
     "name": "Badji Lounes"
@@ -23,7 +23,7 @@
     "token": {
       "type": "string",
       "title": "Tracker token",
-      "description": "A YouTrack permanent token or an Azure DevOps personal access token (Work Items read & write). Write it as \"<tracker url> <token>\" to bind it to that tracker and skip /acceptance-setup. Leave empty to use the ACCEPTANCE_TRACKER_TOKEN environment variable.",
+      "description": "A YouTrack permanent token or an Azure DevOps personal access token (Work Items read & write), written as \"<tracker url> <token>\" to bind it to that tracker. Leave empty to use the ACCEPTANCE_TRACKER_TOKEN environment variable, then the file ~/.config/acceptance/token (recommended locally: every surface reads it).",
       "sensitive": true,
       "default": ""
     }
