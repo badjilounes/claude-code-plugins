@@ -181,6 +181,10 @@ Several people can work on the same repository, each with their own token. Nothi
 
 Everything is kept under `.claude/acceptance/` in the repository: `<branch>.feature`, `<branch>.evidence.json`, the proof files and the published pages. Add the folder to your `.gitignore` (but keep `.claude/acceptance.json`).
 
+## Design decisions
+
+- [ADR 0001 — A team defines its ticket workflow, the plugin enforces it](docs/adr/0001-a-team-defines-its-ticket-workflow.md) (proposed)
+
 ## Develop
 
 ```bash
