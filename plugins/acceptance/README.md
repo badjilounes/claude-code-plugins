@@ -14,22 +14,24 @@ The criteria, prompts and artifacts are written in French.
 
 ## Install
 
-```bash
-claude plugin marketplace add badjilounes/claude-code-plugins
-```
+Two things are set up separately:
 
-```bash
-claude plugin install acceptance@badjilounes
-```
+- **The tracker** (which YouTrack or Azure DevOps, which projects): once per repository, in a committed file.
+- **Your token**: once per place you work (your machine, a cloud environment). It never goes into the repository.
 
-The install asks for the options below; change them later from `/config`.
+Write the token as `<tracker url> <token>`, for example `https://acme.youtrack.cloud perm:abc…`. This binds it to that tracker, and nothing else needs approving (see [Why the URL goes with the token](#why-the-url-goes-with-the-token)).
 
-## Configure your tracker
+### 1. The tracker — once per repository
 
-The tracker is set per repository, by one command only:
+In a Claude Code session opened on the repository, type:
 
 ```text
 /acceptance-setup https://<org>.youtrack.cloud CORE,GROWTH
+```
+
+or, for Azure DevOps:
+
+```text
 /acceptance-setup https://dev.azure.com/<organization> "<project>" [work item type]
 ```
 
@@ -39,19 +41,73 @@ The tracker is set per repository, by one command only:
 | Then | Short names tickets may be created in, the default first: `CORE,GROWTH` | The project that holds the work items, then the work item type (`User Story` by default) |
 | Ticket IDs | `CORE-42` → branch `feature/CORE-42` | `1234` → branch `feature/1234`, shown as `#1234` |
 
-It writes `.claude/acceptance.json` at the root of the git repository (the session folder outside one), wherever the session sits in it. Commit it: every session, a cloud one included, reads the tracker from there.
+The command writes `.claude/acceptance.json` at the root of the git repository. **Commit and push it**: every session, local or cloud, reads the tracker from it. This command is the only way to set the tracker.
 
-Running the command yourself also approves that tracker (kind, URL and project) on this machine (kept in the plugin's user store). The token is only sent to an approved tracker, and only to an https URL without credentials, query or fragment: a `.claude/acceptance.json` that a repository ships pointing elsewhere is not trusted until you run `/acceptance-setup` with that URL. Only a person typing it (at the prompt or through Remote Control) can run the command. A cloud container starts with an empty store. To skip the command in every cloud session, put the tracker URL in front of the token, in the same variable:
+### 2a. Local install — on your machine
 
-```text
-ACCEPTANCE_TRACKER_TOKEN=https://<org>.youtrack.cloud perm:…
-```
+1. Install the plugin:
 
-The token is then bound to that URL: it is used only when `.claude/acceptance.json` names that exact URL, and never sent anywhere else. A repository can override the variable, but only with a token of its own, so it never gets yours. The `token` option takes the same form (`https://<org>.youtrack.cloud perm:…`), so a local install can skip `/acceptance-setup` too. A token without a URL in front, in either place, still needs `/acceptance-setup`.
+   ```bash
+   claude plugin marketplace add badjilounes/claude-code-plugins
+   claude plugin install acceptance@badjilounes
+   ```
 
-The token is never written to the repository: set the plugin's `token` option (`/config`, kept in secure storage) or the `ACCEPTANCE_TRACKER_TOKEN` environment variable (the one to use in a cloud environment). The tracker must be served over HTTPS: the token is only ever sent to the tracker URL's origin, and proof files are only downloaded from it.
+   Already installed? `claude plugin update acceptance@badjilounes`.
 
-When the tracker is not configured, the tools say what is missing (URL or token) instead of reporting the ticket as missing. The plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
+2. Save your token, bound to the tracker, in the plugin's `token` option (secure storage). Paste the token alone when the command waits; it adds the URL in front:
+
+   ```bash
+   read -rs T && printf '{"token":"https://<org>.youtrack.cloud %s"}' "$T" | claude plugin configure acceptance@badjilounes --values-stdin; unset T
+   ```
+
+   `claude plugin configure acceptance@badjilounes` (without `--values-stdin`) shows which options are set. If your version says `unknown command 'configure'`, run `claude update` first.
+
+3. Restart Claude Code (`/exit`, then `claude`).
+
+4. Check: ask Claude to resume a ticket (`use_ticket CORE-42`). It switches to `feature/CORE-42`.
+
+### 2b. Cloud environment — claude.ai/code
+
+1. Make the plugin available to cloud sessions. Either it is installed on your account, or the repository declares it in its committed `.claude/settings.json`:
+
+   ```json
+   {
+     "extraKnownMarketplaces": { "badjilounes": { "source": { "source": "github", "repo": "badjilounes/claude-code-plugins" } } },
+     "enabledPlugins": { "acceptance@badjilounes": true }
+   }
+   ```
+
+2. Add the token to the cloud environment: environment menu in the session's title bar → **Edit** → environment variables. Add it as a plain variable, not under network secrets, and without quotes:
+
+   ```text
+   ACCEPTANCE_TRACKER_TOKEN=https://<org>.youtrack.cloud perm:…
+   ```
+
+3. Start a **new** session: variables are read when a session starts.
+
+4. Check: ask Claude to resume a ticket (`use_ticket CORE-42`).
+
+### Troubleshooting
+
+The tools say exactly what is missing instead of calling the ticket missing:
+
+| Message | Fix |
+| --- | --- |
+| `n'est pas configuré : URL (/acceptance-setup)` | No `.claude/acceptance.json` at the repository root: step 1, then commit it. |
+| `n'est pas configuré : jeton` | No token where this session runs: step 2a or 2b. In the cloud, start a new session after adding the variable. |
+| `n'a pas été approuvé sur cette machine` | The token has no URL in front, or a different one: write it as `<tracker url> <token>`, with the exact URL of `.claude/acceptance.json`. Or type `/acceptance-setup <url> <projects>` yourself, which approves the tracker on this machine only. |
+| `inaccessible sur <url> : … 401` / `404` | The tracker refused the token, or the ticket does not exist for that account: check the token's rights on the project. |
+
+Without a configured tracker the plugin still negotiates rules and keeps proofs locally; they reach the ticket once it is configured.
+
+### Why the URL goes with the token
+
+`.claude/acceptance.json` comes with the repository, so on its own it could point anywhere. The token is therefore only sent to a tracker you approved:
+
+- **A bound token** (`<tracker url> <token>`, in the option or the variable) approves exactly that URL. A repository can override the variable, but only with a token of its own, so it never gets yours.
+- **`/acceptance-setup` typed by you** approves the tracker (kind, URL, project) in the plugin's user store on this machine. Only a person typing the command (at the prompt or through Remote Control) approves. A cloud container starts with an empty store, which is why the cloud uses a bound token.
+
+Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When both the option and the variable are set, the option wins.
 
 ## Tools Claude gets
 
