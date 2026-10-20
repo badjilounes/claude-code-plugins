@@ -304,6 +304,43 @@ describe('tracker origin approval', () => {
     expect(auth[0]?.endsWith('Bearer perm:file')).toBe(true)
   })
 
+  test('the token file holds one line per tracker and each repository gets its own', { options: {} }, async ($, on) => {
+    base(on)
+    const auth: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', () => ({ value: true }))
+    on('fs.read', (_$, e) => ({ value: e.path === '/Users/me/.config/acceptance/token' ? '# trackers\nhttps://sofia-post.youtrack.cloud perm:sofia\nhttps://dev.azure.com/uegar pat-uegar\n' : JSON.stringify({ tracker: 'azure-devops', trackerUrl: 'https://dev.azure.com/uegar', azureProject: 'Neo Lite', azureWorkItemType: 'User Story' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/Users/me' : undefined }))
+    on('http.fetch', (_$, e) => {
+      auth.push(`${e.url} ${e.init?.headers?.Authorization ?? ''}`)
+      return OK({ id: 1234, fields: { 'System.Title': 'Carrousel', 'System.Description': '' } })
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: '1234' })
+
+    expect(auth[0]?.startsWith('https://dev.azure.com/uegar/Neo%20Lite/_apis/wit/workitems/1234')).toBe(true)
+    expect(auth[0]?.endsWith(`Basic ${btoa(':pat-uegar')}`)).toBe(true)
+  })
+
+  test('ACCEPTANCE_TRACKER_TOKEN takes several "<url> <token>" pairs separated by ;', { options: {} }, async ($, on) => {
+    base(on)
+    const auth: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', (_$, e) => ({ value: e.name === 'ACCEPTANCE_TRACKER_TOKEN' ? 'https://dev.azure.com/uegar pat-uegar; https://sofia-post.youtrack.cloud perm:sofia' : undefined }))
+    on('http.fetch', (_$, e) => {
+      auth.push(e.init?.headers?.Authorization ?? '')
+      return OK({ idReadable: 'SPROD-26', summary: 'Carrousel flou' })
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' })
+
+    expect(auth[0]).toBe('Bearer perm:sofia')
+  })
+
   test('a token bound to another tracker is never sent to the repository tracker', { options: {} }, async ($, on) => {
     base(on)
     const fetched: string[] = []

@@ -219,14 +219,23 @@ function approvalKey(config: TrackerConfig): string {
 
 async function rawConfig($: EngineInterface): Promise<TrackerConfig> {
   const saved = await savedSettings($)
-  const config = configOf({ ...saved, token: '' }, (await trackerToken($)).token)
-  return { ...config, url: typeof saved.trackerUrl === 'string' && saved.trackerUrl !== '' ? normalizedUrl(saved.trackerUrl) || 'invalid' : '' }
+  const url = typeof saved.trackerUrl === 'string' && saved.trackerUrl !== '' ? normalizedUrl(saved.trackerUrl) || 'invalid' : ''
+  const config = configOf({ ...saved, token: '' }, (await trackerToken($, url)).token)
+  return { ...config, url }
 }
 
 function boundToken(value: string): { url: string; token: string } {
   const [first = '', ...rest] = value.split(/\s+/)
   const url = rest.length > 0 ? normalizedUrl(first) : ''
   return url !== '' ? { url, token: rest.join(' ') } : { url: '', token: value }
+}
+
+function tokensOf(value: string): { url: string; token: string }[] {
+  return value
+    .split(/[\n;]/)
+    .map(one => one.trim())
+    .filter(one => one !== '' && !one.startsWith('#'))
+    .map(boundToken)
 }
 
 async function tokenFile($: EngineInterface): Promise<string> {
@@ -237,14 +246,16 @@ async function tokenFile($: EngineInterface): Promise<string> {
   return (await $.fs.read(path).catch(() => '')).trim()
 }
 
-async function trackerToken($: EngineInterface): Promise<{ url: string; token: string }> {
-  const option = typeof OPTIONS.token === 'string' ? OPTIONS.token.trim() : ''
-  const variable = ((await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '').trim()
-  return boundToken(option || variable || (await tokenFile($)))
+async function trackerToken($: EngineInterface, url: string): Promise<{ url: string; token: string }> {
+  const option = typeof OPTIONS.token === 'string' ? OPTIONS.token : ''
+  const variable = (await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? ''
+  const tokens = [option, variable, await tokenFile($)].flatMap(tokensOf)
+
+  return tokens.find(one => url !== '' && one.url === url) ?? tokens.find(one => one.url === '') ?? { url: '', token: '' }
 }
 
 async function boundToToken($: EngineInterface, config: TrackerConfig): Promise<boolean> {
-  const { url } = await trackerToken($)
+  const { url } = await trackerToken($, config.url)
   return url !== '' && url === config.url
 }
 
@@ -273,7 +284,7 @@ async function setup($: EngineInterface, args: string, origin: string): Promise<
   await $.fs.write(`${await repositoryRoot($)}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
   const approved = configOf({ ...settings }, '')
   await $.store.set('approvedTrackers', [...new Set([...(await approvedTrackers($)), approvalKey(approved)])])
-  const config = configOf({ ...settings, token: '' }, (await trackerToken($)).token)
+  const config = configOf({ ...settings, token: '' }, (await trackerToken($, settings.trackerUrl)).token)
   const token = config.token !== '' ? '' : ` Jeton manquant : écris « <url> <jeton> » dans ~/${TOKEN_FILE}, l'option token du plugin ou la variable ACCEPTANCE_TRACKER_TOKEN.`
 
   return { text: `${trackerName(config)} configuré : ${config.url} enregistré dans ${SETTINGS_FILE} — à committer pour que chaque session (et le cloud) le retrouve.${token}` }

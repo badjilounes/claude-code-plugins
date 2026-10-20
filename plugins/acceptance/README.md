@@ -56,11 +56,23 @@ Works the same in every local surface: the CLI, Claude Desktop and the IDE exten
 
    Already installed? `claude plugin marketplace update badjilounes && claude plugin update acceptance@badjilounes`.
 
-2. Write your token, bound to the tracker, in `~/.config/acceptance/token`, readable by you only. Paste the token alone when the command waits; it adds the URL in front:
+2. Add your token, bound to its tracker, to `~/.config/acceptance/token`, readable by you only. The file holds **one line per tracker**, `<tracker url> <token>`; each repository gets the line whose URL matches its `.claude/acceptance.json`. Paste the token alone when the command waits; it adds the line with the URL in front:
 
    ```bash
-   mkdir -p ~/.config/acceptance && read -rs T && printf 'https://<org>.youtrack.cloud %s\n' "$T" > ~/.config/acceptance/token && chmod 600 ~/.config/acceptance/token; unset T
+   # YouTrack
+   mkdir -p ~/.config/acceptance && read -rs T && printf 'https://<org>.youtrack.cloud %s\n' "$T" >> ~/.config/acceptance/token && chmod 600 ~/.config/acceptance/token; unset T
+   # Azure DevOps (a personal access token with Work Items read & write)
+   mkdir -p ~/.config/acceptance && read -rs T && printf 'https://dev.azure.com/<organization> %s\n' "$T" >> ~/.config/acceptance/token && chmod 600 ~/.config/acceptance/token; unset T
    ```
+
+   Run one command per tracker you use (`>>` appends). The result looks like this; lines starting with `#` are ignored:
+
+   ```text
+   https://acme.youtrack.cloud perm:…
+   https://dev.azure.com/acme 3x…
+   ```
+
+   To replace a token, edit its line. The URL must be exactly the one `/acceptance-setup` wrote (for Azure DevOps, the organization URL, without the project).
 
    The plugin reads this file itself, so it does not depend on how Claude Code was started. An app opened from the Dock or a launcher does not get the variables of your shell profile; this file does not need them.
 
@@ -71,13 +83,13 @@ Works the same in every local surface: the CLI, Claude Desktop and the IDE exten
 <details>
 <summary>Other places the token can go</summary>
 
-The plugin takes the first one set, in this order:
+Each place takes the same `<tracker url> <token>` form, several pairs separated by new lines or `;`. For a repository, the plugin uses the first pair whose URL matches its tracker, looking in this order:
 
 1. The plugin's `token` option, kept in secure storage, set with `claude plugin configure acceptance@badjilounes --values-stdin` (JSON `{"token":"<url> <token>"}` on stdin) or `/config`. An option saved by one surface may not be seen by another (another copy of the plugin, for instance one synced from claude.ai), so prefer the file when you use several.
 2. The `ACCEPTANCE_TRACKER_TOKEN` environment variable. In a cloud environment this is the way, see 2b.
 3. The file `~/.config/acceptance/token` (`%USERPROFILE%\.config\acceptance\token` on Windows).
 
-An option left over from an earlier setup wins over the file: clear it with `printf '{"token":""}' | claude plugin configure acceptance@badjilounes --values-stdin`.
+A token without a URL in front, left over from an earlier setup, is only a fallback, but it is sent to whichever tracker `/acceptance-setup` approved: clear it with `printf '{"token":""}' | claude plugin configure acceptance@badjilounes --values-stdin`.
 
 </details>
 
@@ -97,6 +109,8 @@ An option left over from an earlier setup wins over the file: clear it with `pri
    ```text
    ACCEPTANCE_TRACKER_TOKEN=https://<org>.youtrack.cloud perm:…
    ```
+
+   Several trackers in the same environment: separate the pairs with `;`, for example `https://<org>.youtrack.cloud perm:…; https://dev.azure.com/<organization> 3x…`.
 
 3. Start a **new** session: variables are read when a session starts.
 
@@ -122,7 +136,35 @@ Without a configured tracker the plugin still negotiates rules and keeps proofs 
 - **A bound token** (`<tracker url> <token>`, in the file, the option or the variable) approves exactly that URL. A repository can override the variable, but only with a token of its own, so it never gets yours; it cannot write your home folder or your plugin options.
 - **`/acceptance-setup` typed by you** approves the tracker (kind, URL, project) in the plugin's user store on this machine. Only a person typing the command (at the prompt or through Remote Control) approves. A cloud container starts with an empty store, which is why the cloud uses a bound token.
 
-Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When several are set, the option wins, then the variable, then the file.
+Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When several places hold a token for the same tracker, the option wins, then the variable, then the file. A token without a URL in front is only used when no place holds one bound to the repository's tracker.
+
+## Collaborate
+
+Several people can work on the same repository, each with their own token. Nothing secret is shared.
+
+**Shared, in the repository:**
+
+- `.claude/acceptance.json`: the tracker kind, URL and project. No secret.
+- `.claude/settings.json`: the marketplace and `"enabledPlugins": { "acceptance@badjilounes": true }`, so every session on the repository loads the plugin.
+
+**Each collaborator, once, on their own machine:**
+
+1. Install the plugin ([2a](#2a-local-install--on-your-machine), step 1).
+2. Create **their own** token: a YouTrack permanent token, or an Azure DevOps personal access token with **Work Items (Read & write)**.
+3. Add it to **their own** `~/.config/acceptance/token`, on the line of the repository's tracker ([2a](#2a-local-install--on-your-machine), step 2).
+4. Restart Claude Code. No `/acceptance-setup` is needed: the tracker is already in the repository, and the token is bound to its URL.
+
+**Each collaborator, in the cloud:** their **own** cloud environment, with their own `ACCEPTANCE_TRACKER_TOKEN` ([2b](#2b-cloud-environment--claudeaicode)). The variable belongs to the environment: people who share one environment share the token in it.
+
+**What this gives you:**
+
+| | |
+| --- | --- |
+| Traceability | Everyone acts under their own identity: tickets created, rules saved and proofs attached appear in the tracker under the name of whoever did the work. |
+| Revocation | Revoking one collaborator's token affects nobody else. |
+| Safety | A token never leaves its owner's machine and is only sent to the URL on its own line: a `.claude/acceptance.json` edited to point elsewhere gets nothing. |
+
+**Tracker rights:** each collaborator needs to create and edit tickets in the project. In Azure DevOps, that is usually the project's **Contributors** group with a **Basic** access level. In YouTrack, a role that can create and update issues in the project.
 
 ## Tools Claude gets
 
