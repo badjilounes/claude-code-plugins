@@ -41,14 +41,13 @@ The tracker is set per repository, by one command only:
 
 It writes `.claude/acceptance.json` at the root of the git repository (the session folder outside one), wherever the session sits in it. Commit it: every session, a cloud one included, reads the tracker from there.
 
-Running the command yourself also approves that tracker (kind, URL and project) on this machine (kept in the plugin's user store). The token is only sent to an approved tracker, and only to an https URL without credentials, query or fragment: a `.claude/acceptance.json` that a repository ships pointing elsewhere is not trusted until you run `/acceptance-setup` with that URL. Only a person typing it (at the prompt or through Remote Control) can run the command. A cloud container starts with an empty store: to skip the command in every cloud session, list the approved tracker URLs in the environment, next to the token. The repository cannot set them:
+Running the command yourself also approves that tracker (kind, URL and project) on this machine (kept in the plugin's user store). The token is only sent to an approved tracker, and only to an https URL without credentials, query or fragment: a `.claude/acceptance.json` that a repository ships pointing elsewhere is not trusted until you run `/acceptance-setup` with that URL. Only a person typing it (at the prompt or through Remote Control) can run the command. A cloud container starts with an empty store. To skip the command in every cloud session, put the tracker URL in front of the token, in the same variable:
 
 ```text
-ACCEPTANCE_TRACKER_TOKEN=perm:…
-ACCEPTANCE_TRACKER_APPROVED=https://<org>.youtrack.cloud
+ACCEPTANCE_TRACKER_TOKEN=https://<org>.youtrack.cloud perm:…
 ```
 
-`ACCEPTANCE_TRACKER_APPROVED` is a comma-separated list. It only approves the URL that `.claude/acceptance.json` names; it never sets it.
+The token is then bound to that URL: it is used only when `.claude/acceptance.json` names that exact URL, and never sent anywhere else. A repository can override the variable, but only with a token of its own, so it never gets yours. A token without a URL in front still needs `/acceptance-setup`.
 
 The token is never written to the repository: set the plugin's `token` option (`/config`, kept in secure storage) or the `ACCEPTANCE_TRACKER_TOKEN` environment variable (the one to use in a cloud environment). The tracker must be served over HTTPS: the token is only ever sent to the tracker URL's origin, and proof files are only downloaded from it.
 
