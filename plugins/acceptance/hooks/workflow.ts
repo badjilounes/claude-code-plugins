@@ -40,6 +40,9 @@ const STATE_KEYS: readonly StateKey[] = ['active', 'closed', 'done']
 const PLAIN_ACTIONS = ['assign-ticket', 'create-subtasks', 'estimate-subtasks', 'assign-subtask', 'log-time'] as const
 const SUBTASK_ACTIONS = ['assign-subtask', 'set-subtask-state', 'log-time']
 const PLACEHOLDER = /\{\{\s*([a-z.]+)\s*\}\}/g
+const LINK = /^[A-Za-z][A-Za-z -]{0,39}$/
+export const ITEM_ID = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
+export const TEMPLATE_MAX_BYTES = 64 * 1024
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -107,6 +110,7 @@ function trackerOf(value: unknown, errors: string[]): Workflow['tracker'] {
   if (result.states.closed === '') errors.push('tracker.states.closed manquant')
   if (typeof done === 'string' ? done === '' : Object.keys(done).length === 0) errors.push('tracker.states.done manquant')
   if (result.subtask.type === '') errors.push('tracker.subtask.type manquant')
+  if (!LINK.test(result.subtask.link)) errors.push('tracker.subtask.link : lettres, espaces et tirets seulement (ex. « subtask of »)')
   return result
 }
 
@@ -237,7 +241,7 @@ export function progressOf(raw: unknown, ticket: string): Progress {
   return {
     ticket,
     done: texts(value.done),
-    subtasks: subtasks.map(one => ({
+    subtasks: subtasks.filter(one => ITEM_ID.test(text(one.id))).map(one => ({
       module: text(one.module),
       id: text(one.id),
       title: text(one.title),

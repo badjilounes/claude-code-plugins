@@ -113,7 +113,7 @@ describe('workflow progress', () => {
 
 type Call = { method: string; url: string; body: unknown; auth: string }
 
-function repository(on: On, branch: string, files: Map<string, string>, answer: (call: Call) => unknown, now = { at: 1_000_000 }): Call[] {
+function repository(on: On, branch: string, files: Map<string, string>, answer: (call: Call) => unknown, now = { at: 1_000_000 }, links: Record<string, string> = {}): Call[] {
   const calls: Call[] = []
   on('session.cwd', () => ({ value: '/repo' }))
   on('clock.now', () => ({ value: now.at }))
@@ -132,6 +132,14 @@ function repository(on: On, branch: string, files: Map<string, string>, answer: 
   on('fs.write', (_$, e) => {
     files.set(key(e.path), e.text)
     return { value: undefined }
+  })
+  on('fs.stat', (_$, e) => {
+    const path = key(e.path)
+    const target = links[path]
+    if (target !== undefined) return { value: { kind: 'file', size: 10, mtimeMs: 0, isLink: true, realPath: target } }
+    if (files.has(path)) return { value: { kind: 'file', size: (files.get(path) ?? '').length, mtimeMs: 0, isLink: false, realPath: path } }
+    if ([...files.keys()].some(one => one.startsWith(`${path}/`))) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false, realPath: path } }
+    return { deny: 'ENOENT' }
   })
   on('http.fetch', (_$, e) => {
     const call = { method: e.init?.method ?? 'GET', url: e.url, body: e.init?.body === undefined ? undefined : JSON.parse(e.init.body), auth: e.init?.headers?.Authorization ?? '' }
@@ -224,6 +232,36 @@ describe('workflow_step on YouTrack', () => {
     expect(ran).toContain('## CORE-4 — Calendrier')
     expect(ran).toContain('- [x] **back-end** — API (CORE-5) · estimé 1 h · passé 45 min')
     expect(ran).toContain('Rien de spécial')
+  })
+})
+
+describe('workflow files a repository controls', () => {
+  test('a sub-task link that is not a plain link name is refused', async () => {
+    const { errors } = parseWorkflow({ ...WORKFLOW, tracker: { ...WORKFLOW.tracker, subtask: { type: 'Task', link: 'subtask of CORE-1 State Fixed' } } })
+
+    expect(errors.some(one => one.includes('tracker.subtask.link'))).toBe(true)
+  })
+
+  test('a template that is a symbolic link is never read', YOUTRACK, async ($, on) => {
+    const repo = files(YOUTRACK_SETTINGS)
+    repo.set('/repo/.claude/acceptance/feature_CORE-4.workflow.json', JSON.stringify({ ticket: TICKET, done: ['take', 'plan', 'work@CORE-5', 'finish@CORE-5'], subtasks: [{ ...BACK, closed: true }] }))
+    repository(on, `feature/${TICKET}`, repo, youtrackAnswer(), { at: 1 }, { '/repo/.claude/acceptance-templates/pull-request.md': '/Users/me/.ssh/id_rsa' })
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__workflow_step', step: 'pull-request' }))
+
+    expect(ran).toContain('template introuvable')
+    expect(ran).not.toContain('## CORE-4')
+  })
+
+  test('a sub-task id that is not a plain identifier is dropped from the progress', YOUTRACK, async ($, on) => {
+    const repo = files(YOUTRACK_SETTINGS)
+    repo.set('/repo/.claude/acceptance/feature_CORE-4.workflow.json', JSON.stringify({ ticket: TICKET, done: ['take', 'plan'], subtasks: [{ ...BACK, id: '../../admin/users' }] }))
+    const calls = repository(on, `feature/${TICKET}`, repo, youtrackAnswer())
+
+    const ran = JSON.stringify(await $.tool.call({ tool: 'mcp__acceptance__workflow_step', step: 'work', subtask: 'back-end' }))
+
+    expect(ran).toContain('aucune sous-tâche ouverte')
+    expect(calls.some(one => one.url.includes('admin'))).toBe(false)
   })
 })
 

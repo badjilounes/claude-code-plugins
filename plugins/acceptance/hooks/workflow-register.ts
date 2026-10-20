@@ -5,7 +5,7 @@ import type { EngineDeps, StepInput } from './engine'
 import { currentName, projectIdOf, proofsMarkdown, repositoryRoot, required, scenariosMarkdown, trackerConfig } from './register'
 import { azureJournalOf, displayId, isReady, issueUrl, journalIdsOf, journalRequests, meOf, meRequest, ticketOf, trackerName, updatesRequest, vocabularyOf, vocabularyRequests, youtrackJournalOf } from './tracker'
 import type { HttpRequest, JournalEntry, TrackerConfig, Vocabulary } from './tracker'
-import { PRESETS, TEMPLATE_PRESETS, TEMPLATES_DIR, WORKFLOW_FILE, duration, emptyProgress, gateProblem, moduleOf, nextSteps, parseWorkflow, progressOf, templateErrors } from './workflow'
+import { PRESETS, TEMPLATE_MAX_BYTES, TEMPLATE_PRESETS, TEMPLATES_DIR, WORKFLOW_FILE, duration, emptyProgress, gateProblem, moduleOf, nextSteps, parseWorkflow, progressOf, templateErrors } from './workflow'
 import type { Progress, Workflow } from './workflow'
 
 export const STEP_TOOL = 'workflow_step'
@@ -30,6 +30,15 @@ function slug(name: string): string {
 async function readText($: EngineInterface, path: string): Promise<string | undefined> {
   if (!(await $.fs.exists(path).catch(() => false))) return undefined
   return $.fs.read(path).catch(() => undefined)
+}
+
+async function readTemplate($: EngineInterface, path: string): Promise<string | undefined> {
+  const root = await repositoryRoot($)
+  const folder = await $.fs.stat(`${root}/${TEMPLATES_DIR}`, { resolve: true }).catch(() => undefined)
+  const file = await $.fs.stat(`${root}/${path}`, { resolve: true }).catch(() => undefined)
+  if (folder?.realPath === undefined || file?.realPath === undefined || folder.isLink) return undefined
+  if (file.isLink || file.kind !== 'file' || file.size > TEMPLATE_MAX_BYTES || !file.realPath.startsWith(`${folder.realPath.replace(/[\\/]+$/, '')}/`)) return undefined
+  return readText($, `${root}/${path}`)
 }
 
 async function loadWorkflow($: EngineInterface): Promise<Loaded> {
@@ -141,7 +150,7 @@ async function depsFor($: EngineInterface, workflow: Workflow, config: TrackerCo
     branch,
     call,
     now: () => $.clock.now(),
-    template: path => readText($, `${root}/${path}`),
+    template: path => readTemplate($, path),
     scenarios: () => scenariosMarkdown($, branch),
     proofs: () => proofsMarkdown($, branch),
   }
@@ -228,8 +237,8 @@ async function check($: EngineInterface): Promise<string> {
   const errors = [...loaded.errors]
   const root = await repositoryRoot($)
   for (const [name, path] of Object.entries(loaded.workflow.templates)) {
-    const body = await readText($, `${root}/${path}`)
-    if (body === undefined) errors.push(`template ${name} introuvable : ${path}`)
+    const body = await readTemplate($, path)
+    if (body === undefined) errors.push(`template ${name} introuvable, trop gros (64 Ko max), lien symbolique ou hors de ${TEMPLATES_DIR}/ : ${path}`)
     else errors.push(...templateErrors(name, body))
   }
   const config = await trackerConfig($)

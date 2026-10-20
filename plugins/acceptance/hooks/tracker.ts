@@ -14,6 +14,7 @@ export type HttpRequest = { method: string; url: string; headers: Record<string,
 export type Issue = { summary: string; description: string; rules: string; context: string; comments: string[]; attachments: { name: string; url: string }[] }
 
 const YOUTRACK_ID = /\b[A-Z][A-Z0-9]+-\d+\b/
+const YOUTRACK_ISSUE = /^[A-Z][A-Z0-9]+-\d+$/
 const AZURE_ID = /(?:^|\/)(\d+)(?=$|[-_/.])/
 const RULES_HEADING = "Règles d'acceptation"
 const MARKDOWN_RULES = /## Règles d'acceptation\s*```gherkin\n([\s\S]*?)```/
@@ -430,15 +431,15 @@ function azureValue(change: FieldChange): string | number {
 
 export function updateRequest(config: TrackerConfig, id: string, changes: FieldChange[]): HttpRequest {
   if (config.kind === 'azure-devops') {
-    return patch(config, azureApi(config, `workitems/${id}?api-version=7.1`), changes.map(change => ({ op: 'add', path: `/fields/${change.field}`, value: azureValue(change) })))
+    return patch(config, azureApi(config, `workitems/${encodeURIComponent(id)}?api-version=7.1`), changes.map(change => ({ op: 'add', path: `/fields/${change.field}`, value: azureValue(change) })))
   }
-  return json(config, 'POST', `${config.url}/api/issues/${id}?fields=id`, {
+  return json(config, 'POST', `${config.url}/api/issues/${encodeURIComponent(id)}?fields=id`, {
     customFields: changes.map(change => ({ name: change.field, $type: YOUTRACK_FIELD_TYPES[change.kind], value: youtrackValue(change) })),
   })
 }
 
 export function projectOfRequest(config: TrackerConfig, id: string): HttpRequest {
-  return json(config, 'GET', `${config.url}/api/issues/${id}?fields=idReadable,summary,project(id),customFields(name,value(name,login))`)
+  return json(config, 'GET', `${config.url}/api/issues/${encodeURIComponent(id)}?fields=idReadable,summary,project(id),customFields(name,value(name,login))`)
 }
 
 export function projectIdOfIssue(response: unknown): string {
@@ -473,7 +474,7 @@ export function subtaskRequest(config: TrackerConfig, projectId: string, parent:
     return patch(config, azureApi(config, `workitems/$${encodeURIComponent(type)}?api-version=7.1`), [
       { op: 'add', path: '/fields/System.Title', value: title },
       { op: 'add', path: '/fields/System.Description', value: markdownToHtml(description) },
-      { op: 'add', path: '/relations/-', value: { rel: 'System.LinkTypes.Hierarchy-Reverse', url: `${config.url}/_apis/wit/workItems/${parent}` } },
+      { op: 'add', path: '/relations/-', value: { rel: 'System.LinkTypes.Hierarchy-Reverse', url: `${config.url}/_apis/wit/workItems/${encodeURIComponent(parent)}` } },
     ])
   }
   return json(config, 'POST', `${config.url}/api/issues?fields=idReadable`, { project: { id: projectId }, summary: title, description, customFields: [{ name: 'Type', $type: 'SingleEnumIssueCustomField', value: { name: type } }] })
@@ -481,12 +482,13 @@ export function subtaskRequest(config: TrackerConfig, projectId: string, parent:
 
 export function linkRequest(config: TrackerConfig, child: string, link: string, parent: string): HttpRequest | undefined {
   if (config.kind === 'azure-devops') return undefined
+  if (!/^[A-Za-z][A-Za-z -]{0,39}$/.test(link) || !YOUTRACK_ISSUE.test(parent) || !YOUTRACK_ISSUE.test(child)) return undefined
   return json(config, 'POST', `${config.url}/api/commands`, { query: `${link} ${parent}`, issues: [{ idReadable: child }] })
 }
 
 export function workItemRequest(config: TrackerConfig, id: string, minutes: number, at: number, note: string): HttpRequest | undefined {
   if (config.kind === 'azure-devops') return undefined
-  return json(config, 'POST', `${config.url}/api/issues/${id}/timeTracking/workItems?fields=id`, { duration: { minutes }, date: at, text: note })
+  return json(config, 'POST', `${config.url}/api/issues/${encodeURIComponent(id)}/timeTracking/workItems?fields=id`, { duration: { minutes }, date: at, text: note })
 }
 
 export function numberField(response: unknown, field: string): number {
@@ -542,11 +544,11 @@ export function journalRequests(config: TrackerConfig, login: string, from: stri
 }
 
 export function journalIdsOf(response: unknown): string[] {
-  return list(response, 'workItems').map(one => String(one.id ?? '')).filter(Boolean).slice(0, 100)
+  return list(response, 'workItems').map(one => String(one.id ?? '')).filter(id => /^\d+$/.test(id)).slice(0, 100)
 }
 
 export function updatesRequest(config: TrackerConfig, id: string): HttpRequest {
-  return json(config, 'GET', azureApi(config, `workItems/${id}/updates?api-version=7.1`))
+  return json(config, 'GET', azureApi(config, `workItems/${encodeURIComponent(id)}/updates?api-version=7.1`))
 }
 
 function valueName(value: unknown): string {

@@ -16,7 +16,7 @@ import {
   workItemRequest,
 } from './tracker'
 import type { FieldChange, HttpRequest, Me, TrackerConfig } from './tracker'
-import { actionOf, billableMinutes, doneKey, doneState, duration, missingFor, render, roundedMinutes, stepOf, subtaskOf } from './workflow'
+import { ITEM_ID, actionOf, billableMinutes, doneKey, doneState, duration, missingFor, render, roundedMinutes, stepOf, subtaskOf } from './workflow'
 import type { Action, Progress, Step, Subtask, Workflow } from './workflow'
 
 export type StepInput = {
@@ -97,7 +97,9 @@ async function createSubtasks(run: Run): Promise<void> {
     const title = wanted.title.trim() || `${ticket.label} — ${wanted.module}`
     const id = createdIdOf(config, await run.deps.call(subtaskRequest(config, projectId, ticket.id, workflow.tracker.subtask.type, title, `Sous-tâche « ${wanted.module} » de ${ticket.label}.`)))
     if (id === '') throw new Error(`sous-tâche « ${wanted.module} » non créée : aucun identifiant rendu`)
+    if (!ITEM_ID.test(id)) throw new Error(`identifiant de sous-tâche inattendu : ${id.slice(0, 40)}`)
     const link = linkRequest(config, id, workflow.tracker.subtask.link, ticket.id)
+    if (config.kind === 'youtrack' && link === undefined) throw new Error(`lien « ${workflow.tracker.subtask.link} » refusé`)
     if (link !== undefined) await run.deps.call(link)
     const subtask: Subtask = { module: wanted.module, id, title, estimate: Math.max(0, Math.round(wanted.estimate)), startedAt: 0, spent: 0, closed: false }
     run.progress = { ...run.progress, subtasks: [...run.progress.subtasks, subtask] }
