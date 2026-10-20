@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/badjilounes/claude-code-plugins/main/plugins/acceptance/schema/workflow.schema.json",
+  "title": "Acceptance — team workflow (.claude/acceptance-workflow.json)",
+  "type": "object",
+  "required": ["version", "tracker", "modules", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "tracker": {
+      "type": "object",
+      "description": "The tracker's own vocabulary. Read it with /acceptance-workflow or the tracker_vocabulary tool.",
+      "required": ["states", "subtask"],
+      "additionalProperties": false,
+      "properties": {
+        "states": {
+          "type": "object",
+          "required": ["active", "closed", "done"],
+          "additionalProperties": false,
+          "properties": {
+            "active": { "type": "string", "description": "State of a ticket or sub-task being worked (YouTrack: In Progress, Azure DevOps: Active)." },
+            "closed": { "type": "string", "description": "State of a finished sub-task (Done, Closed)." },
+            "done": {
+              "description": "State the ticket ends in: one name, or one per ticket type, \"*\" for the others.",
+              "oneOf": [{ "type": "string" }, { "type": "object", "additionalProperties": { "type": "string" } }]
+            }
+          }
+        },
+        "subtask": {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "description": "Type of the sub-tasks (Task)." },
+            "link": { "type": "string", "default": "subtask of", "description": "YouTrack only: the command that links a sub-task to its ticket." }
+          }
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Field names (YouTrack) or reference names (Azure DevOps). Left out: the tracker's defaults.",
+          "properties": {
+            "state": { "type": "string", "description": "Default: State / System.State." },
+            "assignee": { "type": "string", "description": "Default: Assignee / System.AssignedTo." },
+            "estimate": { "type": "string", "description": "Default: Estimation / Microsoft.VSTS.Scheduling.OriginalEstimate." },
+            "spent": { "type": "string", "description": "Azure DevOps only. Default: Microsoft.VSTS.Scheduling.CompletedWork. YouTrack logs work items." },
+            "billable": { "type": "string", "description": "A separate field for billable time, written when time.billable is true." }
+          }
+        }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Module name → globs of the paths that belong to it. An edited file is attributed to the first module that matches.",
+      "additionalProperties": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "do"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "do": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(assign-ticket|set-ticket-state:(active|closed|done)|create-subtasks|estimate-subtasks|assign-subtask|set-subtask-state:(active|closed|done)|log-time|open-pr:[A-Za-z0-9_-]+|comment:[A-Za-z0-9_-]+)$"
+            }
+          },
+          "requires": { "type": "array", "items": { "type": "string" }, "description": "Step ids that must be done first; \"<id>:all\" for a per-subtask step done on every sub-task." },
+          "repeat": { "const": "per-subtask", "description": "The step runs once per sub-task, named by its module." }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the plugin refuses until a step is done.",
+      "properties": {
+        "edit": { "type": "string", "description": "Editing code. A per-subtask step means: the edited file's module has an open sub-task with that step done." },
+        "commit": { "type": "string" },
+        "pullRequest": { "type": "string", "description": "gh pr create and the GitHub MCP create_pull_request." }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "round": { "type": "number", "exclusiveMinimum": 0, "default": 15, "description": "Measured time is rounded up to this many minutes." },
+        "billable": { "type": "boolean", "default": false, "description": "Also write max(real time, estimate) to tracker.fields.billable. The real time is always what is logged as time spent." }
+      }
+    },
+    "templates": {
+      "type": "object",
+      "description": "Template name → Markdown file under .claude/acceptance-templates/.",
+      "additionalProperties": { "type": "string", "pattern": "^\\.claude/acceptance-templates/" }
+    }
+  }
+}
