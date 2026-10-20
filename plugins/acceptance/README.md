@@ -166,6 +166,50 @@ Several people can work on the same repository, each with their own token. Nothi
 
 **Tracker rights:** each collaborator needs to create and edit tickets in the project. In Azure DevOps, that is usually the project's **Contributors** group with a **Basic** access level. In YouTrack, a role that can create and update issues in the project.
 
+## Team workflow
+
+A team can make every session follow its own way of working a ticket: take it, split it into sub-tasks per module, estimate, work one sub-task at a time, log time, open the PR and post the "how to test" and proofs comments from templates, then hand the ticket over. Each step writes to the tracker with the person's own token, so the tracker becomes the history of who did what and when. Design: [ADR 0001](docs/adr/0001-a-team-defines-its-ticket-workflow.md).
+
+Without a workflow file, nothing changes: the plugin works as described above.
+
+### Set it up — once per repository
+
+1. In a session on the repository, type `/acceptance-workflow`. It reads your tracker's real types, states and fields with your token, lists the repository's folders, and has Claude propose the workflow with the `acceptance-workflow-authoring` skill. Claude only asks what it cannot infer.
+
+   Prefer to start from a preset? `/acceptance-workflow init minimal|per-module|full` writes `.claude/acceptance-workflow.json` (and, for `full`, the templates in `.claude/acceptance-templates/`) with `<placeholders>` to replace.
+
+2. Check it: `/acceptance-workflow check` validates the file, its templates and every state, type, field and link against the tracker.
+
+3. Preview it: `/acceptance-workflow dry-run <ticket>` lists the requests each step would send, without sending anything.
+
+4. Commit `.claude/acceptance-workflow.json` and `.claude/acceptance-templates/`. Every collaborator and every session now follows it.
+
+Editors get completion from the JSON Schema: put `"$schema": "https://raw.githubusercontent.com/badjilounes/claude-code-plugins/main/plugins/acceptance/schema/workflow.schema.json"` at the top of the file.
+
+### What the file holds
+
+| Key | What |
+| --- | --- |
+| `tracker` | The tracker's own names: the states for "being worked", "finished" and "delivered" (per ticket type), the sub-task type, and the fields when they differ from the defaults. |
+| `modules` | Module name → globs, for example `"back-end": ["apps/*-api/**"]`. An edited file belongs to the first module that matches. |
+| `steps` | The ordered steps, each a list of actions (`assign-ticket`, `set-ticket-state:active`, `create-subtasks`, `estimate-subtasks`, `assign-subtask`, `set-subtask-state:active`, `log-time`, `set-subtask-state:closed`, `open-pr:<template>`, `comment:<template>`, `set-ticket-state:done`), with `requires` and `"repeat": "per-subtask"` for the sub-task steps. |
+| `gates` | What is refused until a step is done: `edit`, `commit`, `pullRequest`. |
+| `time` | `round` (minutes, 15 by default) and `billable`. |
+| `templates` | Markdown files with `{{ticket.id}}`, `{{subtasks}}`, `{{scenarios}}`, `{{proofs}}`, `{{notes}}`… |
+
+The full reference, with each tracker's specifics, is the [authoring skill](skills/acceptance-workflow-authoring/SKILL.md).
+
+### How it runs
+
+- **One sub-task per person and module.** The unit of work is the sub-task. Two people on a ticket each create their own; a re-opened ticket gets a new sub-task. A ticket someone else holds stays assigned to them.
+- **Gates.** Editing a module's files needs its open sub-task started, and a file outside every module needs at least one sub-task in progress; a commit needs a sub-task in progress; a pull request needs every sub-task finished (as the team sets `gates`). On a branch without a ticket, a gated edit is refused with a proposal to create the ticket or resume one. Files under `.claude/` are never gated.
+- **Time.** The time logged is the time measured between starting a sub-task and logging it, rounded up. Claude can correct it when a session was interrupted. To bill a fixed amount, `time.billable` writes max(real time, estimate) to a separate field; the real time is never replaced.
+- **Steps.** Claude runs them with `mcp__acceptance__workflow_step`; called with no step, it shows progress and what comes next.
+
+### The journal
+
+`/acceptance-journal <person|me> <YYYY-MM-DD> [YYYY-MM-DD]` lists what someone did: assignments, state changes and time logged in the tracker, plus their commits. Ask Claude "what did Alice do on 20 October?" and it summarizes it with the `journal` tool. YouTrack reads author-dated work items and activities; Azure DevOps reads the work items' revisions.
+
 ## Tools Claude gets
 
 | Tool | What it does |
@@ -174,16 +218,20 @@ Several people can work on the same repository, each with their own token. Nothi
 | `mcp__acceptance__create_ticket` | Creates the ticket with its context and rules, then switches to `feature/<ID>` or `fix/<ID>`. |
 | `mcp__acceptance__use_ticket` | Resumes an existing ticket on its branch. |
 | `mcp__acceptance__add_evidence` | Adds a proof (capture, video, cURL, test, artifact, file) tied to a scenario. |
+| `mcp__acceptance__workflow_step` | Runs a step of the team workflow, or shows its progress. |
+| `mcp__acceptance__tracker_vocabulary` | Reads the tracker's types, states, fields and links, and the repository's folders. |
+| `mcp__acceptance__check_workflow` | Validates the workflow file and its templates against the tracker. |
+| `mcp__acceptance__journal` | What a person did on a date or a period, from the tracker and git. |
 
-`/acceptance-setup` configures the tracker; `/criteres` prints the ticket and the rules of the current branch.
+`/acceptance-setup` configures the tracker; `/criteres` prints the ticket and the rules of the current branch; `/acceptance-workflow` creates, checks and previews the team workflow; `/acceptance-journal` prints someone's journal.
 
 ## Local files
 
-Everything is kept under `.claude/acceptance/` in the repository: `<branch>.feature`, `<branch>.evidence.json`, the proof files and the published pages. Add the folder to your `.gitignore` (but keep `.claude/acceptance.json`).
+Everything is kept under `.claude/acceptance/` in the repository: `<branch>.feature`, `<branch>.evidence.json`, `<branch>.workflow.json` (your progress in the team workflow: steps done, your sub-tasks, start times), the proof files and the published pages. Add the folder to your `.gitignore` (but keep `.claude/acceptance.json`, `.claude/acceptance-workflow.json` and `.claude/acceptance-templates/`).
 
 ## Design decisions
 
-- [ADR 0001 — A team defines its ticket workflow, the plugin enforces it](docs/adr/0001-a-team-defines-its-ticket-workflow.md) (proposed)
+- [ADR 0001 — A team defines its ticket workflow, the plugin enforces it](docs/adr/0001-a-team-defines-its-ticket-workflow.md) (accepted)
 
 ## Develop
 

@@ -375,3 +375,219 @@ export function linkAttachmentRequest(config: TrackerConfig, id: string, url: st
     'application/json-patch+json',
   )
 }
+
+export type FieldKind = 'state' | 'user' | 'period' | 'text'
+
+export type FieldChange = { field: string; kind: FieldKind; value: string | number }
+
+export type Me = { login: string; name: string }
+
+export type Vocabulary = { states: string[]; types: string[]; fields: string[]; links: string[] }
+
+export type JournalEntry = { at: number; ticket: string; title: string; what: string; minutes: number }
+
+const YOUTRACK_FIELD_TYPES: Record<FieldKind, string> = {
+  state: 'StateIssueCustomField',
+  user: 'SingleUserIssueCustomField',
+  period: 'PeriodIssueCustomField',
+  text: 'SimpleIssueCustomField',
+}
+
+function list(value: unknown, key?: string): Record<string, unknown>[] {
+  const source = key === undefined ? value : typeof value === 'object' && value !== null ? (value as Record<string, unknown>)[key] : undefined
+  return Array.isArray(source) ? source.filter((one): one is Record<string, unknown> => typeof one === 'object' && one !== null) : []
+}
+
+function patch(config: TrackerConfig, url: string, operations: unknown[]): HttpRequest {
+  return json(config, 'PATCH', url, operations, 'application/json-patch+json')
+}
+
+export function meRequest(config: TrackerConfig): HttpRequest {
+  if (config.kind === 'azure-devops') return json(config, 'GET', `${config.url}/_apis/connectionData`)
+  return json(config, 'GET', `${config.url}/api/users/me?fields=login,fullName`)
+}
+
+export function meOf(config: TrackerConfig, response: unknown): Me {
+  const value = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {}
+  if (config.kind === 'azure-devops') {
+    const user = (value.authenticatedUser ?? {}) as Record<string, unknown>
+    const account = ((user.properties as Record<string, Record<string, unknown>> | undefined)?.Account?.$value ?? '') as string
+    return { login: text(account), name: text(user.providerDisplayName) }
+  }
+  return { login: text(value.login), name: text(value.fullName) || text(value.login) }
+}
+
+function youtrackValue(change: FieldChange): unknown {
+  if (change.kind === 'user') return { login: change.value }
+  if (change.kind === 'period') return { minutes: Number(change.value) }
+  if (change.kind === 'state') return { name: change.value }
+  return change.value
+}
+
+function azureValue(change: FieldChange): string | number {
+  return change.kind === 'period' ? Math.round((Number(change.value) / 60) * 100) / 100 : change.value
+}
+
+export function updateRequest(config: TrackerConfig, id: string, changes: FieldChange[]): HttpRequest {
+  if (config.kind === 'azure-devops') {
+    return patch(config, azureApi(config, `workitems/${id}?api-version=7.1`), changes.map(change => ({ op: 'add', path: `/fields/${change.field}`, value: azureValue(change) })))
+  }
+  return json(config, 'POST', `${config.url}/api/issues/${id}?fields=id`, {
+    customFields: changes.map(change => ({ name: change.field, $type: YOUTRACK_FIELD_TYPES[change.kind], value: youtrackValue(change) })),
+  })
+}
+
+export function projectOfRequest(config: TrackerConfig, id: string): HttpRequest {
+  return json(config, 'GET', `${config.url}/api/issues/${id}?fields=idReadable,summary,project(id),customFields(name,value(name,login))`)
+}
+
+export function projectIdOfIssue(response: unknown): string {
+  const project = typeof response === 'object' && response !== null ? ((response as Record<string, unknown>).project as Record<string, unknown> | undefined) : undefined
+  return text(project?.id)
+}
+
+export function typeOfIssue(config: TrackerConfig, response: unknown): string {
+  const value = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {}
+  if (config.kind === 'azure-devops') return text(((value.fields ?? {}) as Record<string, unknown>)['System.WorkItemType'])
+  const type = list(value, 'customFields').find(one => one.name === 'Type')
+  return text((type?.value as Record<string, unknown> | undefined)?.name)
+}
+
+export function assigneeOf(config: TrackerConfig, response: unknown, field: string): string {
+  const value = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {}
+  if (config.kind === 'azure-devops') {
+    const assigned = ((value.fields ?? {}) as Record<string, unknown>)[field]
+    return typeof assigned === 'object' && assigned !== null ? text((assigned as Record<string, unknown>).uniqueName) : text(assigned)
+  }
+  const one = list(value, 'customFields').find(item => item.name === field)
+  return text((one?.value as Record<string, unknown> | undefined)?.login)
+}
+
+export function titleOfIssue(config: TrackerConfig, response: unknown): string {
+  const value = typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {}
+  return config.kind === 'azure-devops' ? text(((value.fields ?? {}) as Record<string, unknown>)['System.Title']) : text(value.summary)
+}
+
+export function subtaskRequest(config: TrackerConfig, projectId: string, parent: string, type: string, title: string, description: string): HttpRequest {
+  if (config.kind === 'azure-devops') {
+    return patch(config, azureApi(config, `workitems/$${encodeURIComponent(type)}?api-version=7.1`), [
+      { op: 'add', path: '/fields/System.Title', value: title },
+      { op: 'add', path: '/fields/System.Description', value: markdownToHtml(description) },
+      { op: 'add', path: '/relations/-', value: { rel: 'System.LinkTypes.Hierarchy-Reverse', url: `${config.url}/_apis/wit/workItems/${parent}` } },
+    ])
+  }
+  return json(config, 'POST', `${config.url}/api/issues?fields=idReadable`, { project: { id: projectId }, summary: title, description, customFields: [{ name: 'Type', $type: 'SingleEnumIssueCustomField', value: { name: type } }] })
+}
+
+export function linkRequest(config: TrackerConfig, child: string, link: string, parent: string): HttpRequest | undefined {
+  if (config.kind === 'azure-devops') return undefined
+  return json(config, 'POST', `${config.url}/api/commands`, { query: `${link} ${parent}`, issues: [{ idReadable: child }] })
+}
+
+export function workItemRequest(config: TrackerConfig, id: string, minutes: number, at: number, note: string): HttpRequest | undefined {
+  if (config.kind === 'azure-devops') return undefined
+  return json(config, 'POST', `${config.url}/api/issues/${id}/timeTracking/workItems?fields=id`, { duration: { minutes }, date: at, text: note })
+}
+
+export function numberField(response: unknown, field: string): number {
+  const fields = typeof response === 'object' && response !== null ? (((response as Record<string, unknown>).fields ?? {}) as Record<string, unknown>) : {}
+  return Number(fields[field]) || 0
+}
+
+export function vocabularyRequests(config: TrackerConfig, projectId: string): HttpRequest[] {
+  if (config.kind === 'azure-devops') return [json(config, 'GET', azureApi(config, 'workitemtypes?api-version=7.1'))]
+  return [
+    json(config, 'GET', `${config.url}/api/admin/projects/${projectId}/customFields?fields=field(name),bundle(values(name))&$top=200`),
+    json(config, 'GET', `${config.url}/api/issueLinkTypes?fields=name,sourceToTarget,targetToSource`),
+  ]
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))]
+}
+
+export function vocabularyOf(config: TrackerConfig, responses: unknown[]): Vocabulary {
+  if (config.kind === 'azure-devops') {
+    const types = list(responses[0], 'value')
+    return {
+      types: unique(types.map(one => text(one.name))),
+      states: unique(types.flatMap(one => list(one, 'states').map(state => text(state.name)))),
+      fields: unique(types.flatMap(one => list(one, 'fields').map(field => text(field.referenceName)))),
+      links: ['System.LinkTypes.Hierarchy-Reverse'],
+    }
+  }
+  const fields = list(responses[0])
+  const valuesOf = (name: string) => fields.filter(one => text((one.field as Record<string, unknown> | undefined)?.name) === name).flatMap(one => list(one.bundle, 'values').map(value => text(value.name)))
+  return {
+    types: unique(valuesOf('Type')),
+    states: unique(valuesOf('State')),
+    fields: unique(fields.map(one => text((one.field as Record<string, unknown> | undefined)?.name))),
+    links: unique(list(responses[1]).flatMap(one => [text(one.sourceToTarget), text(one.targetToSource), text(one.name)])),
+  }
+}
+
+function day(date: string, end: boolean): number {
+  return Date.parse(`${date}T${end ? '23:59:59.999' : '00:00:00.000'}Z`)
+}
+
+export function journalRequests(config: TrackerConfig, login: string, from: string, to: string): HttpRequest[] {
+  if (config.kind === 'azure-devops') {
+    return [json(config, 'POST', azureApi(config, 'wiql?$top=200&api-version=7.1'), { query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.ChangedDate] >= '${from}' ORDER BY [System.ChangedDate] DESC` })]
+  }
+  const author = encodeURIComponent(login)
+  return [
+    json(config, 'GET', `${config.url}/api/workItems?fields=date,duration(minutes),text,issue(idReadable,summary)&author=${author}&startDate=${from}&endDate=${to}&$top=500`),
+    json(config, 'GET', `${config.url}/api/activities?fields=timestamp,target(idReadable,summary),field(name),added(name,login,fullName,minutes),removed(name)&categories=CustomFieldCategory&author=${author}&start=${day(from, false)}&end=${day(to, true)}&$top=500`),
+  ]
+}
+
+export function journalIdsOf(response: unknown): string[] {
+  return list(response, 'workItems').map(one => String(one.id ?? '')).filter(Boolean).slice(0, 100)
+}
+
+export function updatesRequest(config: TrackerConfig, id: string): HttpRequest {
+  return json(config, 'GET', azureApi(config, `workItems/${id}/updates?api-version=7.1`))
+}
+
+function valueName(value: unknown): string {
+  if (Array.isArray(value)) return value.map(valueName).filter(Boolean).join(', ')
+  if (typeof value === 'object' && value !== null) {
+    const one = value as Record<string, unknown>
+    return text(one.name) || text(one.fullName) || text(one.displayName) || text(one.login) || (typeof one.minutes === 'number' ? `${one.minutes} min` : '')
+  }
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
+}
+
+export function youtrackJournalOf(responses: unknown[]): JournalEntry[] {
+  const work = list(responses[0]).map(one => {
+    const issue = (one.issue ?? {}) as Record<string, unknown>
+    return { at: Number(one.date) || 0, ticket: text(issue.idReadable), title: text(issue.summary), what: `temps saisi${text(one.text) !== '' ? ` : ${text(one.text)}` : ''}`, minutes: Number((one.duration as Record<string, unknown> | undefined)?.minutes) || 0 }
+  })
+  const changes = list(responses[1]).map(one => {
+    const target = (one.target ?? {}) as Record<string, unknown>
+    const field = text((one.field as Record<string, unknown> | undefined)?.name)
+    return { at: Number(one.timestamp) || 0, ticket: text(target.idReadable), title: text(target.summary), what: `${field} → ${valueName(one.added)}`, minutes: 0 }
+  })
+  return [...work, ...changes].sort((a, b) => a.at - b.at)
+}
+
+export function azureJournalOf(id: string, response: unknown, login: string, from: string, to: string, spentField: string): JournalEntry[] {
+  const start = day(from, false)
+  const end = day(to, true)
+  return list(response, 'value').flatMap(update => {
+    const by = (update.revisedBy ?? {}) as Record<string, unknown>
+    const at = Date.parse(text(update.revisedDate))
+    const mine = [text(by.uniqueName), text(by.displayName)].some(one => one !== '' && one.toLowerCase() === login.toLowerCase())
+    if (!mine || !(at >= start && at <= end)) return []
+    const fields = (update.fields ?? {}) as Record<string, { oldValue?: unknown; newValue?: unknown }>
+    const title = text(fields['System.Title']?.newValue)
+    const entries: JournalEntry[] = []
+    const state = fields['System.State']
+    if (state !== undefined) entries.push({ at, ticket: id, title, what: `État → ${valueName(state.newValue)}`, minutes: 0 })
+    const assigned = fields['System.AssignedTo']
+    if (assigned !== undefined) entries.push({ at, ticket: id, title, what: `Assigné → ${valueName(assigned.newValue)}`, minutes: 0 })
+    const spent = spentField === '' ? undefined : fields[spentField]
+    if (spent !== undefined) entries.push({ at, ticket: id, title, what: 'temps saisi', minutes: Math.round(((Number(spent.newValue) || 0) - (Number(spent.oldValue) || 0)) * 60) })
+    return entries
+  })
+}

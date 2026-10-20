@@ -41,6 +41,7 @@ import type { HttpRequest, Issue, TrackerConfig } from './tracker'
 import type { PageLinks, PageProof, PageSubject, PageTicket } from './pages'
 
 import { THEME, ring } from './look'
+import { bashGate, registerWorkflow, registerWorkflowTools, workflowContext } from './workflow-register'
 
 const RULES = 'acceptance-rules'
 const PROOFS = 'acceptance-proofs'
@@ -189,7 +190,7 @@ async function readJson($: EngineInterface, path: string): Promise<unknown> {
 
 let OPTIONS: Readonly<Record<string, unknown>> = {}
 
-async function repositoryRoot($: EngineInterface): Promise<string> {
+export async function repositoryRoot($: EngineInterface): Promise<string> {
   const ran = await $.process.run(['git', 'rev-parse', '--show-toplevel']).catch(() => undefined)
   const root = ran !== undefined && ran.exitCode === 0 ? ran.stdout.trim() : ''
   return root.startsWith('/') ? root : $.session.cwd()
@@ -265,7 +266,7 @@ async function isApproved($: EngineInterface, config: TrackerConfig): Promise<bo
   return (await approvedTrackers($)).includes(approvalKey(config)) || (await boundToToken($, config))
 }
 
-async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
+export async function trackerConfig($: EngineInterface): Promise<TrackerConfig> {
   const config = await rawConfig($)
   return (await isApproved($, config)) ? config : { ...config, url: '', token: '' }
 }
@@ -424,7 +425,7 @@ async function pullTicket($: EngineInterface, config: TrackerConfig, ticket: str
   return [{ id: ticket, url: issueUrl(config, ticket), summary: issue.summary, context: issue.context }, issue.rules, list]
 }
 
-async function currentName($: EngineInterface): Promise<string> {
+export async function currentName($: EngineInterface): Promise<string> {
   const { exitCode, stdout } = await $.process.run(['git', 'branch', '--show-current'])
 
   return exitCode === 0 ? stdout.trim() : ''
@@ -751,7 +752,7 @@ function notConfigured(config: TrackerConfig): string {
   return `${trackerName(config)} n'est pas configuré : ${missing.join(', ')}`
 }
 
-async function required($: EngineInterface, config: TrackerConfig, request: HttpRequest): Promise<unknown> {
+export async function required($: EngineInterface, config: TrackerConfig, request: HttpRequest): Promise<unknown> {
   if (!isReady(config)) throw new Error(notConfigured(config))
   const response = await $.http.fetch(request.url, { method: request.method, headers: request.headers, body: request.body })
   if (!response.ok) throw new Error(`${trackerName(config)} ${response.status} : ${response.text.slice(0, 200)}`)
@@ -764,7 +765,7 @@ async function pushRules($: EngineInterface, config: TrackerConfig, id: string, 
   await required($, config, descriptionRequest(config, id, withRules(config, issue.description, feature)))
 }
 
-async function projectIdOf($: EngineInterface, config: TrackerConfig, project: string): Promise<string> {
+export async function projectIdOf($: EngineInterface, config: TrackerConfig, project: string): Promise<string> {
   if (config.kind === 'azure-devops') return config.project
   const list = await required($, config, projectsRequest(config))
   const found = (Array.isArray(list) ? (list as { id?: string; shortName?: string }[]) : []).find(one => one.shortName === project)
@@ -903,11 +904,35 @@ async function useTicket($: EngineInterface, input: Record<string, unknown>): Pr
   return { result: `Ticket ${displayId(config, id)} : ${issue.summary} ; ${await switchTo($, `${input.kind === 'fix' ? 'fix' : 'feature'}/${id}`)}.` }
 }
 
+export async function scenariosMarkdown($: EngineInterface, branch: string): Promise<string> {
+  const [text, list] = await readLocal($, branch)
+  const rules = parseRules(text)
+  const lines = rules.subjects.flatMap(subject => [
+    ...(subject.name !== '' ? [`**${subject.name}**`] : []),
+    ...subject.scenarios.map(scenario => `- [${list.some(item => sameName(item.scenario, scenario.name)) ? 'x' : ' '}] ${scenario.name}`),
+  ])
+  return lines.length > 0 ? lines.join('\n') : '_Aucun critère enregistré._'
+}
+
+export async function proofsMarkdown($: EngineInterface, branch: string): Promise<string> {
+  const [, list] = await readLocal($, branch)
+  if (list.length === 0) return '_Aucune preuve._'
+  return list
+    .map(item => {
+      const link = item.remote || linkOf(item) || item.file
+      const media = item.media === 'image' && item.remote !== '' ? `\n\n  ![${item.subtitle || item.title}](${item.remote})` : ''
+      return `- **${item.title}${item.subtitle !== '' ? ` — ${item.subtitle}` : ''}**${item.scenario !== '' ? ` (${item.scenario})` : ''}${link !== '' ? ` : ${link}` : ''}${media}`
+    })
+    .join('\n')
+}
+
 export const register: Register = (on, options) => {
   OPTIONS = options
+  registerWorkflow(on)
 
   on('session.start', async ($, e, next) => {
     await registerInputTools($, await trackerConfig($))
+    await registerWorkflowTools($)
     await $.tool.register({
       name: TOOL,
       description:
@@ -971,7 +996,7 @@ export const register: Register = (on, options) => {
     const tracked = ticket !== '' ? `Branche ${branch}, ticket ${label} (${issueUrl(config, ticket)}).` : `Branche ${branch || '(détachée)'} sans ticket.`
     const setup = isReady(config) ? '' : `\n\n${await configProblem($, config)}. Propose à l'utilisateur de lancer lui-même /${SETUP} <url> [projets].`
 
-    return next({ ...e, context: [...(e.context ?? []), `${policy(config)}\n\n${tracked} ${rules}${await artifactLinks($, branch, label)}${setup}`] })
+    return next({ ...e, context: [...(e.context ?? []), `${policy(config)}\n\n${tracked} ${rules}${await artifactLinks($, branch, label)}${setup}${await workflowContext($)}`] })
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
@@ -981,6 +1006,8 @@ export const register: Register = (on, options) => {
     if (created !== undefined && ticketOf(config, created) === '') {
       return { deny: `Une branche porte le numéro de son ticket (feature/${exampleId(config)}) : crée d'abord le ticket avec mcp__acceptance__${CREATE_TOOL}.` }
     }
+    const gated = await bashGate($, command).catch(() => '')
+    if (gated !== '') return { deny: gated }
 
     return next(e)
   })

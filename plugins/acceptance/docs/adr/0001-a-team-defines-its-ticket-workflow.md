@@ -1,6 +1,6 @@
 # ADR 0001 — A team defines its ticket workflow, the plugin enforces it
 
-- **Status:** Proposed
+- **Status:** Accepted, implemented in 0.3.0
 - **Date:** 2026-10-20
 - **Scope:** `plugins/acceptance`
 
@@ -31,53 +31,28 @@ A repository cannot use this file to send a token anywhere new. It only names st
 
 ### 2. The file describes steps, not just settings
 
-```jsonc
+```json
 {
   "$schema": "https://raw.githubusercontent.com/badjilounes/claude-code-plugins/main/plugins/acceptance/schema/workflow.schema.json",
   "version": 1,
-
-  // Tracker vocabulary, mapped once. Values are the tracker's own names.
   "tracker": {
-    "states": {
-      "active": "In Progress",
-      "closed": "Done",
-      "done": { "Bug": "Fixed", "User Story": "Testable", "*": "Done" }
-    },
-    "types": { "bug": ["Bug"], "story": ["User Story", "Feature"] },
+    "states": { "active": "In Progress", "closed": "Done", "done": { "Bug": "Fixed", "User Story": "Testable", "*": "Done" } },
     "subtask": { "type": "Task", "link": "subtask of" },
-    "fields": { "estimate": "Estimation", "spent": "Spent time" }
+    "fields": { "estimate": "Estimation" }
   },
-
-  // Modules a change can touch, detected from the paths it edits.
-  "modules": {
-    "back-end": ["apps/*-api/**", "libs/**/api/**", "libs/**/domain*/**"],
-    "front-end": ["apps/*-web/**", "libs/**/feature-*/**", "libs/**/data-access/**"],
-    "design-system": ["libs/**/ui/**", "tailwind.config.ts"]
-  },
-
-  // The steps, in order. Each names what it does and what it requires.
+  "modules": { "back-end": ["apps/*-api/**", "libs/**/api/**"], "front-end": ["apps/*-web/**"], "design-system": ["libs/**/ui/**"] },
   "steps": [
     { "id": "take", "do": ["assign-ticket", "set-ticket-state:active"] },
-    { "id": "plan", "do": ["create-subtasks:per-module", "estimate-subtasks"], "requires": ["take"] },
+    { "id": "plan", "do": ["create-subtasks", "estimate-subtasks"], "requires": ["take"] },
     { "id": "work", "repeat": "per-subtask", "do": ["assign-subtask", "set-subtask-state:active"], "requires": ["plan"] },
-    { "id": "finish-subtask", "repeat": "per-subtask", "do": ["log-time", "set-subtask-state:closed"] },
-    { "id": "pull-request", "do": ["open-pr:pullRequest"], "requires": ["finish-subtask:all"] },
+    { "id": "finish", "repeat": "per-subtask", "do": ["log-time", "set-subtask-state:closed"], "requires": ["work"] },
+    { "id": "pull-request", "do": ["open-pr:pullRequest"], "requires": ["finish:all"] },
     { "id": "how-to-test", "do": ["comment:howToTest"], "requires": ["pull-request"] },
     { "id": "proofs", "do": ["comment:proofs"], "requires": ["pull-request"] },
     { "id": "hand-over", "do": ["set-ticket-state:done"], "requires": ["how-to-test", "proofs"] }
   ],
-
-  // What the hooks refuse until a step is done.
-  "gates": {
-    "edit": "work",            // editing a module's files needs its sub-task active and assigned to me
-    "commit": "work",
-    "pullRequest": "finish-subtask:all"
-  },
-
-  // How time is logged.
-  "time": { "measure": "active-subtask", "round": "15m", "billable": { "field": "Billable time", "atLeast": "estimate" } },
-
-  // Markdown templates, committed beside the file.
+  "gates": { "edit": "work", "commit": "work", "pullRequest": "finish:all" },
+  "time": { "round": 15 },
   "templates": {
     "pullRequest": ".claude/acceptance-templates/pull-request.md",
     "howToTest": ".claude/acceptance-templates/how-to-test.md",
@@ -86,21 +61,21 @@ A repository cannot use this file to send a token anywhere new. It only names st
 }
 ```
 
-- **`steps`** is an ordered list of **actions** taken from a closed vocabulary that the engine implements: `assign-ticket`, `set-ticket-state:<state key>`, `create-subtasks:per-module|manual`, `estimate-subtasks`, `assign-subtask`, `set-subtask-state:<state key>`, `log-time`, `open-pr:<template>`, `comment:<template>`. A team reorders, removes or repeats steps. It cannot invent actions; a new action is a change to the plugin.
+- **`steps`** is an ordered list of **actions** taken from a closed vocabulary that the engine implements: `assign-ticket`, `set-ticket-state:<state key>`, `create-subtasks`, `estimate-subtasks`, `assign-subtask`, `set-subtask-state:<state key>`, `log-time`, `open-pr:<template>`, `comment:<template>`. A team reorders, removes or repeats steps. It cannot invent actions; a new action is a change to the plugin.
 - **`requires`** makes the order explicit. The engine refuses a step whose requirements are not met, and says which step comes first.
 - **`gates`** binds steps to what Claude does. The `tool.call` hooks refuse an edit, a commit or a pull request until the named step is done, and the refusal says which step to run. This extends the existing refusal of a branch without a ticket number.
-- **`modules`** maps globs to module names. An edit is attributed to the module whose glob matches. `create-subtasks:per-module` proposes one sub-task per module the plan touches, and the user confirms the list.
-- **`templates`** are Markdown files, committed in `.claude/acceptance-templates/` (`.claude/acceptance/` holds local working files and is git-ignored), with `{{placeholders}}`. The engine fills them from what it knows: `{{ticket.id}}`, `{{ticket.title}}`, `{{subtasks}}` (title, module, estimate, time spent), `{{scenarios}}` (the Gherkin rules with their proof status), `{{proofs}}` (images and videos with their descriptions), `{{branch}}`, `{{pr.url}}`, `{{author}}`. An unknown placeholder is an error when the workflow is validated, not when a comment is posted.
+- **`modules`** maps globs to module names. An edit is attributed to the module whose glob matches. `create-subtasks` creates one sub-task per module the plan touches, from a list Claude proposes and the user confirms.
+- **`templates`** are Markdown files, committed in `.claude/acceptance-templates/` (`.claude/acceptance/` holds local working files and is git-ignored), with `{{placeholders}}`. The engine fills them from what it knows: `{{ticket.id}}`, `{{ticket.title}}`, `{{subtasks}}` (title, module, estimate, time spent), `{{scenarios}}` (the Gherkin rules with their proof status), `{{proofs}}` (images and videos with their descriptions), `{{branch}}`, `{{pr.url}}`, `{{author}}`, `{{ticket.url}}`, `{{ticket.type}}`, and `{{notes}}`, the text Claude passes to the step (how to test, what the proofs show). An unknown placeholder is an error when the workflow is validated, not when a comment is posted.
 
 ### 3. Time spent is measured and logged as it was
 
-`log-time` logs the **measured** time between `set-subtask-state:active` and `set-subtask-state:closed` for that sub-task, rounded as configured. The user can correct it before it is sent: an interrupted session is not time spent.
+`log-time` logs the **measured** time from `set-subtask-state:active` to the `log-time` action for that sub-task, rounded up to `time.round` minutes. The user can correct it (`minutes` on the step): an interrupted session is not time spent.
 
-The engine **never replaces the real time with the estimate**. A team that bills a fixed amount per sub-task declares a separate `billable` field: the engine writes `max(spent, estimate)` there, and the real time in the time-spent field. The real time stays true and the billing rule stays visible. Writing an estimate as time spent would make the history, the very thing this ADR is for, wrong.
+The engine **never replaces the real time with the estimate**. A team that bills a fixed amount per sub-task sets `time.billable` and a separate `tracker.fields.billable`: the engine writes `max(spent, estimate)` there, and the real time in the time-spent field. The real time stays true and the billing rule stays visible. Writing an estimate as time spent would make the history, the very thing this ADR is for, wrong.
 
 ### 4. One engine, one adapter per tracker
 
-`hooks/tracker.ts` stays the only file that knows a tracker. It gains the workflow actions, as pure request builders:
+`hooks/tracker.ts` stays the only file that knows a tracker. It gains the workflow actions, as pure request builders; `hooks/workflow.ts` holds the pure workflow logic (parsing, modules, requirements, gates, time, templates), `hooks/engine.ts` runs the steps, and `hooks/workflow-register.ts` wires the tools, commands and gates:
 
 | Action | YouTrack | Azure DevOps |
 | --- | --- | --- |
@@ -118,19 +93,18 @@ Field and state **names** come from `tracker` in the workflow file, never from t
 Writing that JSON by hand against an unfamiliar tracker is the hard part. The plugin ships tools for it:
 
 - **`/acceptance-workflow`** (command) starts a guided creation. It:
-  1. reads the tracker's real vocabulary with the user's token: states, types, sub-task link types and time fields of the project (YouTrack `customFieldSettings`, Azure DevOps process `workItemTypes/{type}/states` and `fields`);
+  1. reads the tracker's real vocabulary with the user's token: states, types, sub-task link types and time fields of the project (YouTrack project custom fields and issue link types, Azure DevOps `workitemtypes` with their states and fields);
   2. proposes the mapping and asks only what it cannot infer;
   3. proposes `modules` from the repository's layout (Nx projects, `apps/`, `libs/`, package manifests);
-  4. proposes a starting template among a few presets (`minimal`, `per-module`, `full`) and the three Markdown templates;
-  5. writes the files and validates them.
+  4. hands over to Claude with the `acceptance-workflow-authoring` skill, which writes the files and validates them; `/acceptance-workflow init minimal|per-module|full` lays a preset and, for `full`, the three Markdown templates.
 - **`/acceptance-workflow check`** validates the file against the schema **and against the tracker**. Every state, type, link and field must exist in the project, every placeholder must be known, and every `requires` must point to an existing step. It reports what is wrong, line by line.
 - **`/acceptance-workflow dry-run <ticket>`** lists, without sending anything, the requests each step would make on that ticket.
 - **A skill, `acceptance-workflow-authoring`**, holds the reference: the action vocabulary, the placeholders, each tracker's specifics, the presets, and worked examples for a YouTrack and an Azure DevOps project. Claude loads it when a team asks to create or change its workflow. The command is the guided path, the skill is the knowledge behind it and behind any hand edit.
-- **A JSON Schema**, `plugins/acceptance/schema/workflow.schema.json`, gives editors completion and validation, and is what `check` runs first.
+- **A JSON Schema**, `plugins/acceptance/schema/workflow.schema.json`, gives editors completion and validation, beside the structural checks `check` runs.
 
 ### 6. The history and the summary come from the tracker
 
-Because every step writes to the tracker under the person's identity, a later **`/acceptance-journal <person> <date|range>`** (separate ADR) reads assignments, state changes and logged time from the tracker, adds the person's commits and pull requests, and has the model summarize them. The summary describes the work (tickets, sub-tasks, time, PRs, proven scenarios), never prompts or conversation.
+Because every step writes to the tracker under the person's identity, **`/acceptance-journal <person|me> <date> [date]`** and the `journal` tool read assignments, state changes and logged time from the tracker and add the person's commits; Claude summarizes them on request. The summary describes the work (tickets, sub-tasks, time, PRs, proven scenarios), never prompts or conversation.
 
 - **YouTrack** gives author-dated work items and an activity stream, so per-person, per-day summaries are direct.
 - **Azure DevOps** keeps `Completed Work` as a total. Per-person, per-day time comes from the work item revisions (`_apis/wit/workItems/{id}/updates`), which the journal reads.
@@ -149,18 +123,17 @@ Because every step writes to the tracker under the person's identity, a later **
   - Tracker rights are each collaborator's: assigning, changing states and logging time need them on the project.
   - Custom processes vary widely. A team whose process needs an action outside the vocabulary asks for it, and it is added to the engine for everyone.
 
+## Decisions on the open points
+
+- **A session without a ticket** proposes to create one. With a workflow that gates edits, editing code on a branch without a ticket is refused, and the refusal proposes `create_ticket` or `use_ticket`.
+- **Several people on one ticket** never share a sub-task: each person creates and works their own sub-tasks, one per module. `assign-ticket` leaves a ticket someone else holds with them.
+- **A re-opened ticket** is worked through a new sub-task: the unit of work is always the sub-task, and closed ones stay closed. Gates ask for an open sub-task in the edited module.
+
 ## Delivery
 
-Each phase is one pull request, tested on both trackers, with the README and the skill updated in the same change.
+Delivered in one change (0.3.0): the schema, the engine and its actions on both trackers, the gates, the templates, `/acceptance-workflow` with `init`, `check` and `dry-run`, the `tracker_vocabulary`, `check_workflow`, `workflow_step` and `journal` tools, `/acceptance-journal`, and the `acceptance-workflow-authoring` skill.
 
-1. **Schema and authoring tools.** `workflow.schema.json`, `/acceptance-workflow` (guided creation), `check` and `dry-run`, the skill, and the `minimal` preset. No enforcement yet: teams can write and validate their file.
-2. **Take and hand over.** `assign-ticket`, `set-ticket-state`, done-by-type, gate `edit` on `take`.
-3. **Sub-tasks and time.** `create-subtasks`, `estimate-subtasks`, `assign-subtask`, `set-subtask-state`, `log-time` (with `billable`), module detection, gates `edit` and `commit` on `work`.
-4. **Templates.** `open-pr`, `comment:howToTest`, `comment:proofs`, the placeholders, the gate `pullRequest`.
-5. **Journal.** `/acceptance-journal`, in its own ADR.
+Known limits:
 
-## Open questions
-
-- **Sessions without a ticket** (exploration, review): outside the workflow, or a lightweight "no ticket" step that logs time on a team-chosen ticket?
-- **Several people on one ticket:** sub-tasks are assigned per person, but who runs `hand-over`? The ticket's assignee, or whoever closes the last sub-task?
-- **Re-opened tickets:** resume at `work`, or start again at `take`?
+- Progress (steps done, sub-tasks, start times) is kept per person and per branch in `.claude/acceptance/<branch>.workflow.json`, beside the other local files: each person sees their own sub-tasks, which matches "one sub-task per person". A new clone or container starts with no local progress: run the steps again (a ticket already assigned or active is simply set again), and create a new sub-task for the remaining work.
+- The journal reads up to 500 YouTrack entries and 100 Azure DevOps work items per query.

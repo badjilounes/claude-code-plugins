@@ -1,8 +1,8 @@
 {
   "name": "acceptance",
   "displayName": "Acceptance",
-  "version": "0.2.6",
-  "description": "Negotiate Gherkin acceptance criteria before any code, open the ticket in your tracker (YouTrack or Azure DevOps) and name the branch after it, then collect every proof — captures, videos, cURL, test runs, artifacts — into the ticket. Rules, proofs and the ticket are published as three artifacts per ticket, linked from a band above the prompt, and any later session recovers them from the branch name.",
+  "version": "0.3.0",
+  "description": "Negotiate Gherkin acceptance criteria before any code, open the ticket in your tracker (YouTrack or Azure DevOps) and name the branch after it, then collect every proof — captures, videos, cURL, test runs, artifacts — into the ticket. Rules, proofs and the ticket are published as three artifacts per ticket, linked from a band above the prompt, and any later session recovers them from the branch name. A team can also commit its own ticket workflow (.claude/acceptance-workflow.json): take the ticket, one sub-task per person and module, estimates, measured time, PR and comment templates, hand-over — enforced by gates on edits, commits and pull requests, created with /acceptance-workflow, and read back with /acceptance-journal.",
   "author": {
     "name": "Badji Lounes"
   },
@@ -11,13 +11,16 @@
   "types": "./types/index.d.ts",
   "keywords": [
     "acceptance-criteria",
-    "gherkin",
-    "bdd",
-    "youtrack",
+    "artifacts",
     "azure-devops",
+    "bdd",
     "evidence",
+    "gherkin",
+    "subtasks",
     "tickets",
-    "artifacts"
+    "time-tracking",
+    "workflow",
+    "youtrack"
   ],
   "userConfig": {
     "token": {
