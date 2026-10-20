@@ -266,6 +266,25 @@ describe('tracker origin approval', () => {
     expect(auth[0]).toBe('Bearer perm:abc')
   })
 
+  test('a token option written as "<url> <token>" binds the token to that tracker too', { options: { token: 'https://sofia-post.youtrack.cloud perm:opt' } }, async ($, on) => {
+    base(on)
+    const auth: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') }))
+    on('fs.read', () => ({ value: JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', () => ({ value: undefined }))
+    on('http.fetch', (_$, e) => {
+      auth.push(`${e.url} ${e.init?.headers?.Authorization ?? ''}`)
+      return OK({ idReadable: 'SPROD-26', summary: 'Carrousel flou' })
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' })
+
+    expect(auth[0]?.startsWith('https://sofia-post.youtrack.cloud/api/issues/SPROD-26')).toBe(true)
+    expect(auth[0]?.endsWith('Bearer perm:opt')).toBe(true)
+  })
+
   test('a token bound to another tracker is never sent to the repository tracker', { options: {} }, async ($, on) => {
     base(on)
     const fetched: string[] = []
