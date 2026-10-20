@@ -46,6 +46,7 @@ const RULES = 'acceptance-rules'
 const PROOFS = 'acceptance-proofs'
 const TOOL = 'add_evidence'
 const SETUP = 'acceptance-setup'
+const TOKEN_FILE = '.config/acceptance/token'
 const KINDS: readonly EvidenceKind[] = ['capture', 'video', 'curl', 'test', 'artifact', 'file', 'other']
 const IMAGE = /\.(png|jpe?g|gif|webp|heic)$/i
 const VIDEO = /\.(mp4|mov|webm|m4v)$/i
@@ -228,9 +229,18 @@ function boundToken(value: string): { url: string; token: string } {
   return url !== '' ? { url, token: rest.join(' ') } : { url: '', token: value }
 }
 
+async function tokenFile($: EngineInterface): Promise<string> {
+  const home = ((await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined)) || '').replace(/[\\/]+$/, '')
+  if (home === '') return ''
+  const path = `${home}/${TOKEN_FILE}`
+  if (!(await $.fs.exists(path).catch(() => false))) return ''
+  return (await $.fs.read(path).catch(() => '')).trim()
+}
+
 async function trackerToken($: EngineInterface): Promise<{ url: string; token: string }> {
   const option = typeof OPTIONS.token === 'string' ? OPTIONS.token.trim() : ''
-  return boundToken(option || ((await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '').trim())
+  const variable = ((await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '').trim()
+  return boundToken(option || variable || (await tokenFile($)))
 }
 
 async function boundToToken($: EngineInterface, config: TrackerConfig): Promise<boolean> {
@@ -264,7 +274,7 @@ async function setup($: EngineInterface, args: string, origin: string): Promise<
   const approved = configOf({ ...settings }, '')
   await $.store.set('approvedTrackers', [...new Set([...(await approvedTrackers($)), approvalKey(approved)])])
   const config = configOf({ ...settings, token: '' }, (await trackerToken($)).token)
-  const token = config.token !== '' ? '' : ' Jeton manquant : renseigne l\'option token du plugin (/config) ou la variable ACCEPTANCE_TRACKER_TOKEN.'
+  const token = config.token !== '' ? '' : ` Jeton manquant : écris « <url> <jeton> » dans ~/${TOKEN_FILE}, l'option token du plugin ou la variable ACCEPTANCE_TRACKER_TOKEN.`
 
   return { text: `${trackerName(config)} configuré : ${config.url} enregistré dans ${SETTINGS_FILE} — à committer pour que chaque session (et le cloud) le retrouve.${token}` }
 }
@@ -726,7 +736,7 @@ async function artifactLinks($: EngineInterface, branch: string, label: string):
 }
 
 function notConfigured(config: TrackerConfig): string {
-  const missing = [config.url === '' ? `URL (/${SETUP})` : '', config.token === '' ? 'jeton (option token ou ACCEPTANCE_TRACKER_TOKEN)' : '', config.kind === 'azure-devops' && config.project === '' ? `projet (/${SETUP})` : ''].filter(Boolean)
+  const missing = [config.url === '' ? `URL (/${SETUP})` : '', config.token === '' ? `jeton (option token, ACCEPTANCE_TRACKER_TOKEN ou ~/${TOKEN_FILE})` : '', config.kind === 'azure-devops' && config.project === '' ? `projet (/${SETUP})` : ''].filter(Boolean)
   return `${trackerName(config)} n'est pas configuré : ${missing.join(', ')}`
 }
 

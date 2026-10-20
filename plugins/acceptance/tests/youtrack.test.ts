@@ -285,6 +285,25 @@ describe('tracker origin approval', () => {
     expect(auth[0]?.endsWith('Bearer perm:opt')).toBe(true)
   })
 
+  test('a token file in the home folder, written as "<url> <token>", is read when neither option nor variable is set', { options: {} }, async ($, on) => {
+    base(on)
+    const auth: string[] = []
+    on('process.run', () => RUN('main\n'))
+    on('fs.exists', (_$, e) => ({ value: e.path.endsWith('.claude/acceptance.json') || e.path === '/Users/me/.config/acceptance/token' }))
+    on('fs.read', (_$, e) => ({ value: e.path === '/Users/me/.config/acceptance/token' ? 'https://sofia-post.youtrack.cloud perm:file\n' : JSON.stringify({ tracker: 'youtrack', trackerUrl: 'https://sofia-post.youtrack.cloud', projects: 'SPROD' }) }))
+    on('store.get', () => ({ value: undefined }))
+    on('env.get', (_$, e) => ({ value: e.name === 'HOME' ? '/Users/me' : undefined }))
+    on('http.fetch', (_$, e) => {
+      auth.push(`${e.url} ${e.init?.headers?.Authorization ?? ''}`)
+      return OK({ idReadable: 'SPROD-26', summary: 'Carrousel flou' })
+    })
+
+    await $.tool.call({ tool: 'mcp__acceptance__use_ticket', id: 'SPROD-26' })
+
+    expect(auth[0]?.startsWith('https://sofia-post.youtrack.cloud/api/issues/SPROD-26')).toBe(true)
+    expect(auth[0]?.endsWith('Bearer perm:file')).toBe(true)
+  })
+
   test('a token bound to another tracker is never sent to the repository tracker', { options: {} }, async ($, on) => {
     base(on)
     const fetched: string[] = []
