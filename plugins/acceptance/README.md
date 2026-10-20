@@ -47,7 +47,7 @@ Running the command yourself also approves that tracker (kind, URL and project) 
 ACCEPTANCE_TRACKER_TOKEN=https://<org>.youtrack.cloud perm:…
 ```
 
-The token is then bound to that URL: it is used only when `.claude/acceptance.json` names that exact URL, and never sent anywhere else. A repository can override the variable, but only with a token of its own, so it never gets yours. A token without a URL in front still needs `/acceptance-setup`.
+The token is then bound to that URL: it is used only when `.claude/acceptance.json` names that exact URL, and never sent anywhere else. A repository can override the variable, but only with a token of its own, so it never gets yours. The `token` option takes the same form (`https://<org>.youtrack.cloud perm:…`), so a local install can skip `/acceptance-setup` too. A token without a URL in front, in either place, still needs `/acceptance-setup`.
 
 The token is never written to the repository: set the plugin's `token` option (`/config`, kept in secure storage) or the `ACCEPTANCE_TRACKER_TOKEN` environment variable (the one to use in a cloud environment). The tracker must be served over HTTPS: the token is only ever sent to the tracker URL's origin, and proof files are only downloaded from it.
 

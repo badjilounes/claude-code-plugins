@@ -218,19 +218,24 @@ function approvalKey(config: TrackerConfig): string {
 
 async function rawConfig($: EngineInterface): Promise<TrackerConfig> {
   const saved = await savedSettings($)
-  const config = configOf({ ...saved, token: OPTIONS.token }, (await environmentToken($)).token)
+  const config = configOf({ ...saved, token: '' }, (await trackerToken($)).token)
   return { ...config, url: typeof saved.trackerUrl === 'string' && saved.trackerUrl !== '' ? normalizedUrl(saved.trackerUrl) || 'invalid' : '' }
 }
 
-async function environmentToken($: EngineInterface): Promise<{ url: string; token: string }> {
-  const raw = ((await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '').trim()
-  const [first = '', ...rest] = raw.split(/\s+/)
+function boundToken(value: string): { url: string; token: string } {
+  const [first = '', ...rest] = value.split(/\s+/)
   const url = rest.length > 0 ? normalizedUrl(first) : ''
-  return url !== '' ? { url, token: rest.join(' ') } : { url: '', token: raw }
+  return url !== '' ? { url, token: rest.join(' ') } : { url: '', token: value }
+}
+
+async function trackerToken($: EngineInterface): Promise<{ url: string; token: string }> {
+  const option = typeof OPTIONS.token === 'string' ? OPTIONS.token.trim() : ''
+  return boundToken(option || ((await $.env.get('ACCEPTANCE_TRACKER_TOKEN').catch(() => undefined)) ?? '').trim())
 }
 
 async function boundToToken($: EngineInterface, config: TrackerConfig): Promise<boolean> {
-  return typeof OPTIONS.token !== 'string' || OPTIONS.token.trim() === '' ? (await environmentToken($)).url === config.url : false
+  const { url } = await trackerToken($)
+  return url !== '' && url === config.url
 }
 
 async function isApproved($: EngineInterface, config: TrackerConfig): Promise<boolean> {
@@ -258,7 +263,7 @@ async function setup($: EngineInterface, args: string, origin: string): Promise<
   await $.fs.write(`${await repositoryRoot($)}/${SETTINGS_FILE}`, `${JSON.stringify(settings, undefined, 2)}\n`)
   const approved = configOf({ ...settings }, '')
   await $.store.set('approvedTrackers', [...new Set([...(await approvedTrackers($)), approvalKey(approved)])])
-  const config = configOf({ ...settings, token: OPTIONS.token }, (await environmentToken($)).token)
+  const config = configOf({ ...settings, token: '' }, (await trackerToken($)).token)
   const token = config.token !== '' ? '' : ' Jeton manquant : renseigne l\'option token du plugin (/config) ou la variable ACCEPTANCE_TRACKER_TOKEN.'
 
   return { text: `${trackerName(config)} configuré : ${config.url} enregistré dans ${SETTINGS_FILE} — à committer pour que chaque session (et le cloud) le retrouve.${token}` }
