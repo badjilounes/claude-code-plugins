@@ -138,6 +138,34 @@ Without a configured tracker the plugin still negotiates rules and keeps proofs 
 
 Only https URLs without credentials, query or fragment are accepted, and proof files are only downloaded from the tracker's URL. When several places hold a token for the same tracker, the option wins, then the variable, then the file. A token without a URL in front is only used when no place holds one bound to the repository's tracker.
 
+## Collaborate
+
+Several people can work on the same repository, each with their own token. Nothing secret is shared.
+
+**Shared, in the repository:**
+
+- `.claude/acceptance.json`: the tracker kind, URL and project. No secret.
+- `.claude/settings.json`: the marketplace and `"enabledPlugins": { "acceptance@badjilounes": true }`, so every session on the repository loads the plugin.
+
+**Each collaborator, once, on their own machine:**
+
+1. Install the plugin ([2a](#2a-local-install--on-your-machine), step 1).
+2. Create **their own** token: a YouTrack permanent token, or an Azure DevOps personal access token with **Work Items (Read & write)**.
+3. Add it to **their own** `~/.config/acceptance/token`, on the line of the repository's tracker ([2a](#2a-local-install--on-your-machine), step 2).
+4. Restart Claude Code. No `/acceptance-setup` is needed: the tracker is already in the repository, and the token is bound to its URL.
+
+**Each collaborator, in the cloud:** their **own** cloud environment, with their own `ACCEPTANCE_TRACKER_TOKEN` ([2b](#2b-cloud-environment--claudeaicode)). The variable belongs to the environment: people who share one environment share the token in it.
+
+**What this gives you:**
+
+| | |
+| --- | --- |
+| Traceability | Everyone acts under their own identity: tickets created, rules saved and proofs attached appear in the tracker under the name of whoever did the work. |
+| Revocation | Revoking one collaborator's token affects nobody else. |
+| Safety | A token never leaves its owner's machine and is only sent to the URL on its own line: a `.claude/acceptance.json` edited to point elsewhere gets nothing. |
+
+**Tracker rights:** each collaborator needs to create and edit tickets in the project. In Azure DevOps, that is usually the project's **Contributors** group with a **Basic** access level. In YouTrack, a role that can create and update issues in the project.
+
 ## Tools Claude gets
 
 | Tool | What it does |
